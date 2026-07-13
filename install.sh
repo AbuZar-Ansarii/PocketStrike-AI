@@ -36,22 +36,37 @@ pkg install -y python git || {
     exit 1
 }
 
-# 3. Install Flask and Requests
+# 3. Clone repository if launch.sh doesn't exist (e.g. running via curl download)
+CLONED=false
+if [ ! -f "launch.sh" ]; then
+    echo -e "\n${BLUE}Cloning PocketstrikeAI repository from GitHub...${NC}"
+    git clone https://github.com/AbuZar-Ansarii/PocketStrike-AI.git
+    cd PocketStrike-AI || exit 1
+    CLONED=true
+fi
+
+# 4. Install Flask and Requests
 echo -e "\n${BLUE}[3/4] Installing Python dependencies (Flask, Requests)...${NC}"
 pip install flask requests
 
-# 4. Make scripts executable
+# 5. Make scripts executable
 echo -e "\n${BLUE}[4/4] Setting execution permissions...${NC}"
 if [ -f "launch.sh" ]; then
     chmod +x launch.sh
-    echo -e "${GREEN}launch.sh is now executable.${NC}"
+    chmod +x setup.py
+    echo -e "${GREEN}Scripts are now executable.${NC}"
 else
-    echo -e "${YELLOW}Warning: launch.sh not found in the current directory.${NC}"
+    echo -e "${RED}Error: launch.sh still not found after download!${NC}"
+    exit 1
 fi
 
 echo -e "\n${GREEN}==================================================${NC}"
 echo -e "${GREEN}      Installation Completed Successfully!        ${NC}"
 echo -e "${CYAN}==================================================${NC}"
 echo -e "You can now start the setup wizard and launch the AI."
-echo -e "To start, run: ${YELLOW}./launch.sh${NC}"
+if [ "$CLONED" = true ]; then
+    echo -e "To start, run: ${YELLOW}cd PocketStrike-AI && ./launch.sh${NC}"
+else
+    echo -e "To start, run: ${YELLOW}./launch.sh${NC}"
+fi
 echo -e "${CYAN}==================================================${NC}"
