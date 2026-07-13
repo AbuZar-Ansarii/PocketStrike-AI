@@ -119,7 +119,10 @@ def call_ai_api(messages):
 
         # 3. OpenAI and compatible APIs (OpenRouter, OpenCode, OpenCode Zen, Ollama, Custom)
         else:
-            url = f"{base_url}/chat/completions"
+            if provider == "ollama":
+                url = f"{base_url}/v1/chat/completions"
+            else:
+                url = f"{base_url}/chat/completions"
             headers = {"Content-Type": "application/json"}
             if api_key:
                 headers["Authorization"] = f"Bearer {api_key}"
