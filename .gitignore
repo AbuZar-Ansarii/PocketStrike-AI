@@ -1,0 +1,12 @@
+# Local configuration containing sensitive API keys and bot tokens
+config.json
+
+# Python caching
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Operating system files
+.DS_Store
+Thumbs.db

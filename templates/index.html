@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PocketstrikeAI - Local Chat Client</title>
+    <!-- Outfit & Inter Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-container">
+                    <svg class="logo-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" fill="url(#logoGrad)" stroke="url(#strokeGrad)" stroke-width="2" stroke-linejoin="round"/>
+                        <defs>
+                            <linearGradient id="logoGrad" x1="3" y1="2" x2="21" y2="22" gradientUnits="userSpaceOnUse">
+                                <stop stop-color="#8B5CF6" />
+                                <stop offset="1" stop-color="#EC4899" />
+                            </linearGradient>
+                            <linearGradient id="strokeGrad" x1="3" y1="2" x2="21" y2="22" gradientUnits="userSpaceOnUse">
+                                <stop stop-color="#EC4899" />
+                                <stop offset="1" stop-color="#3B82F6" />
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                    <span class="logo-text">Pocketstrike<span>AI</span></span>
+                </div>
+                <button class="close-sidebar-btn" id="closeSidebarBtn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+
+            <button class="new-chat-btn" id="newChatBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                New Chat
+            </button>
+
+            <!-- Chat History List -->
+            <div class="sidebar-history-container">
+                <div class="history-label">Recent Chats</div>
+                <div class="sidebar-history" id="sidebarHistory">
+                    <!-- Chats injected via JS -->
+                </div>
+            </div>
+
+            <!-- Sidebar Footer Status -->
+            <div class="sidebar-footer" id="sidebarFooter">
+                <div class="status-card">
+                    <div class="status-row">
+                        <span class="status-label">Provider:</span>
+                        <span class="status-value" id="statusProvider">Loading...</span>
+                    </div>
+                    <div class="status-row">
+                        <span class="status-label">Model:</span>
+                        <span class="status-value highlight" id="statusModel">Loading...</span>
+                    </div>
+                    <div class="status-row">
+                        <span class="status-label">Telegram:</span>
+                        <span class="status-value-tg" id="statusTelegram">
+                            <span class="status-dot"></span>
+                            <span class="status-tg-text">Loading...</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="app-header">
+                <button class="menu-btn" id="menuBtn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                </button>
+                <div class="header-model-info">
+                    <span class="model-badge" id="headerModelBadge">Connecting...</span>
+                </div>
+                <button class="clear-btn" id="clearBtn" title="Clear Chat History">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                </button>
+            </header>
+
+            <!-- Chat Window -->
+            <div class="chat-window">
+                <!-- Welcome Screen -->
+                <div class="welcome-screen" id="welcomeScreen">
+                    <div class="welcome-header">
+                        <div class="glowing-logo">
+                            <svg class="welcome-logo-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" fill="url(#welcomeGrad)" stroke="url(#welcomeStrokeGrad)" stroke-width="2" stroke-linejoin="round"/>
+                                <defs>
+                                    <linearGradient id="welcomeGrad" x1="3" y1="2" x2="21" y2="22" gradientUnits="userSpaceOnUse">
+                                        <stop stop-color="#8B5CF6" />
+                                        <stop offset="1" stop-color="#EC4899" />
+                                    </linearGradient>
+                                    <linearGradient id="welcomeStrokeGrad" x1="3" y1="2" x2="21" y2="22" gradientUnits="userSpaceOnUse">
+                                        <stop stop-color="#EC4899" />
+                                        <stop offset="1" stop-color="#3B82F6" />
+                                    </linearGradient>
+                                </defs>
+                            </svg>
+                        </div>
+                        <h1>What can I create for you today?</h1>
+                        <p>PocketstrikeAI is online and running locally on your phone.</p>
+                    </div>
+
+                    <!-- Suggestions Grid -->
+                    <div class="suggestions-grid">
+                        <div class="suggestion-card" onclick="fillPrompt('Explain SQL Injection in simple terms and how to prevent it.')">
+                            <h3>Explain Security Concept</h3>
+                            <p>"Explain SQL Injection and prevention..."</p>
+                        </div>
+                        <div class="suggestion-card" onclick="fillPrompt('Write a bash shell script to back up a folder in Termux.')">
+                            <h3>Write Termux Script</h3>
+                            <p>"Write a bash backup script..."</p>
+                        </div>
+                        <div class="suggestion-card" onclick="fillPrompt('Create a python script to scan open ports on my local IP.')">
+                            <h3>Network Scan Script</h3>
+                            <p>"Create a Python port scanner..."</p>
+                        </div>
+                        <div class="suggestion-card" onclick="fillPrompt('Draft a professional security report template.')">
+                            <h3>Professional Draft</h3>
+                            <p>"Draft a security report..."</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Messages Container -->
+                <div class="messages-container" id="messagesContainer">
+                    <!-- Messages will be dynamically rendered here -->
+                </div>
+            </div>
+
+            <!-- Input Section -->
+            <footer class="chat-input-area">
+                <div class="input-container">
+                    <textarea id="chatInput" placeholder="Ask PocketstrikeAI anything..." rows="1"></textarea>
+                    <div class="input-actions">
+                        <button class="action-btn" id="attachBtn" title="Attach file (mock)">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                        </button>
+                        <button class="send-btn" id="sendBtn" title="Send message">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="footer-note">
+                    PocketstrikeAI v1.0 • Running locally in Termux
+                </div>
+            </footer>
+        </main>
+    </div>
+
+    <!-- Overlay for mobile sidebar -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
