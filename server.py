@@ -261,19 +261,23 @@ def send_static(path):
     return send_from_directory('static', path)
 
 if __name__ == '__main__':
+    import logging
+    # Suppress Werkzeug default logs and startup banner
+    logging.getLogger('werkzeug').setLevel(logging.ERROR)
+    os.environ["WERKZEUG_RUN_MAIN"] = "true"
+
     # 1. Load config
     if not load_config():
         print("⚠️ Warning: config.json not found! Please run the Setup Wizard first.")
         print("Starting anyway in fallback mode...")
 
     # 2. Launch Telegram Bot if enabled
+    telegram_status = "Disabled"
     if config.get("telegram_enabled") and config.get("telegram_token"):
         tg_token = config["telegram_token"]
         telegram_bot_thread = threading.Thread(target=telegram_bot_loop, args=(tg_token,), daemon=True)
         telegram_bot_thread.start()
-        print("✓ Telegram Bot Thread Spawned.")
-    else:
-        print("✗ Telegram Bot integration is disabled or not configured.")
+        telegram_status = "Active"
 
     # 3. Print access information
     local_ip = get_local_ip()
@@ -292,6 +296,7 @@ if __name__ == '__main__':
     print(f"  Network URL:   {white_color}http://{local_ip}:5000{reset_color}")
     print(f"  AI Provider:   {white_color}{config.get('provider_name', 'None')}{reset_color}")
     print(f"  Model:         {white_color}{config.get('model', 'None')}{reset_color}")
+    print(f"  Telegram Bot:  {white_color}{telegram_status}{reset_color}")
     print(f"{green_color}──────────────────────────────────────────────────────────────────────{reset_color}\n")
 
     # Run Flask

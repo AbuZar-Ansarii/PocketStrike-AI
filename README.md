@@ -28,12 +28,11 @@ PocketstrikeAI provides a stunning glassmorphic web interface (inspired by Claud
 Follow these steps to get PocketstrikeAI running on your Android phone:
 
 ### Step 1: Open Termux and Run the Installer
-Paste this one-line command to install Python, Git, and pip packages:
+Run this one-line command to clone the repository and run the setup dependencies installer automatically:
 
 ```bash
-curl -sL https://raw.githubusercontent.com/AbuZar-Ansarii/PocketStrike-AI/main/install.sh -o install.sh && chmod +x install.sh && ./install.sh
+git clone https://github.com/AbuZar-Ansarii/PocketStrike-AI.git && cd PocketStrike-AI && chmod +x install.sh && ./install.sh
 ```
-*(Alternatively, if you cloned this folder to your Termux directory, run `./install.sh` directly)*.
 
 ### Step 2: Launch and Run Setup
 Run the launcher:
