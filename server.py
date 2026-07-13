@@ -277,22 +277,22 @@ if __name__ == '__main__':
 
     # 3. Print access information
     local_ip = get_local_ip()
-    pink_color = "\033[38;5;198m"
-    violet_color = "\033[38;5;99m"
+    green_color = "\033[38;5;46m"
+    white_color = "\033[38;5;255m"
     reset_color = "\033[0m"
-    banner_text = f"""{pink_color}██████╗  ██████╗  ██████╗██╗  ██╗███████╗████████╗███████╗██████╗  ██╗██╗  ██╗███████╗     █████╗ ██╗
+    banner_text = f"""{green_color}██████╗  ██████╗  ██████╗██╗  ██╗███████╗████████╗███████╗██████╗  ██╗██╗  ██╗███████╗     █████╗ ██╗
 ██╔══██╗██╔═══██╗██╔════╝██║ ██╔╝██╔════╝╚══██╔══╝██╔════╝██╔══██╗ ██║██║ ██╔╝██╔════╝    ██╔══██╗██║
-{violet_color}██████╔╝██║   ██║██║     █████╔╝ █████╗     ██║   ███████╗██████╔╝ ██║█████╔╝ █████╗      ███████║██║
+{white_color}██████╔╝██║   ██║██║     █████╔╝ █████╗     ██║   ███████╗██████╔╝ ██║█████╔╝ █████╗      ███████║██║
 ██╔═══╝ ██║   ██║██║     ██╔═██╗ ██╔══╝     ██║   ╚════██║██╔══██╗ ██║██╔═██╗ ██╔══╝      ██╔══██║██║
 ██║     ╚██████╔╝╚██████╗██║  ██╗███████╗   ██║   ███████║██║  ██║ ██║██║  ██╗███████╗    ██║  ██║██║
 ╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝ ╚═╝╚═╝  ╚═╝╚══════╝    ╚═╝  ╚═╝╚═╝{reset_color}"""
     print(banner_text)
-    print(f"{pink_color}───────────────────────── Server is Starting ─────────────────────────{reset_color}")
-    print(f"  Local URL:     {violet_color}http://127.0.0.1:5000{reset_color}")
-    print(f"  Network URL:   {violet_color}http://{local_ip}:5000{reset_color}")
-    print(f"  AI Provider:   {violet_color}{config.get('provider_name', 'None')}{reset_color}")
-    print(f"  Model:         {violet_color}{config.get('model', 'None')}{reset_color}")
-    print(f"{pink_color}──────────────────────────────────────────────────────────────────────{reset_color}\n")
+    print(f"{green_color}───────────────────────── Server is Starting ─────────────────────────{reset_color}")
+    print(f"  Local URL:     {white_color}http://127.0.0.1:5000{reset_color}")
+    print(f"  Network URL:   {white_color}http://{local_ip}:5000{reset_color}")
+    print(f"  AI Provider:   {white_color}{config.get('provider_name', 'None')}{reset_color}")
+    print(f"  Model:         {white_color}{config.get('model', 'None')}{reset_color}")
+    print(f"{green_color}──────────────────────────────────────────────────────────────────────{reset_color}\n")
 
     # Run Flask
     # Host is 0.0.0.0 so they can access it from their phone browser as well as external devices on local network

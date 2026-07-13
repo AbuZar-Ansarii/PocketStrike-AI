@@ -19,9 +19,12 @@ const headerModelBadge = document.getElementById('headerModelBadge');
 const statusProvider = document.getElementById('statusProvider');
 const statusModel = document.getElementById('statusModel');
 const statusTelegram = document.getElementById('statusTelegram');
+const themeToggleBtn = document.getElementById('themeToggleBtn');
+const themeIcon = document.getElementById('themeIcon');
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
     loadConversations();
     initEventListeners();
     fetchBackendStatus();
@@ -34,6 +37,9 @@ function initEventListeners() {
     menuBtn.addEventListener('click', toggleSidebar);
     closeSidebarBtn.addEventListener('click', toggleSidebar);
     sidebarOverlay.addEventListener('click', toggleSidebar);
+
+    // Theme Toggle
+    themeToggleBtn.addEventListener('click', toggleTheme);
 
     // New Chat Action
     newChatBtn.addEventListener('click', () => {
@@ -55,6 +61,42 @@ function initEventListeners() {
 
     // Send Button Click
     sendBtn.addEventListener('click', handleSend);
+}
+
+// Initialize Theme from LocalStorage or default to dark
+function initTheme() {
+    const savedTheme = localStorage.getItem('pocketstrike_theme') || 'dark';
+    if (savedTheme === 'light') {
+        document.body.classList.add('light-mode');
+        setLightModeIcon();
+    } else {
+        document.body.classList.remove('light-mode');
+        setDarkModeIcon();
+    }
+}
+
+// Toggle between light and dark modes
+function toggleTheme() {
+    const isLight = document.body.classList.toggle('light-mode');
+    if (isLight) {
+        localStorage.setItem('pocketstrike_theme', 'light');
+        setLightModeIcon();
+    } else {
+        localStorage.setItem('pocketstrike_theme', 'dark');
+        setDarkModeIcon();
+    }
+}
+
+// Show moon icon (click to switch to dark mode)
+function setLightModeIcon() {
+    themeIcon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>';
+    themeToggleBtn.setAttribute('title', 'Switch to Dark Mode');
+}
+
+// Show sun icon (click to switch to light mode)
+function setDarkModeIcon() {
+    themeIcon.innerHTML = '<circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>';
+    themeToggleBtn.setAttribute('title', 'Switch to Light Mode');
 }
 
 // Toggle Sidebar for Mobile
