@@ -36,9 +36,8 @@ pkg install -y python git || {
     exit 1
 }
 
-# 3. Upgrade pip and install Flask and Requests
+# 3. Install Flask and Requests
 echo -e "\n${BLUE}[3/4] Installing Python dependencies (Flask, Requests)...${NC}"
-python -m pip install --upgrade pip
 pip install flask requests
 
 # 4. Make scripts executable
