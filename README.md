@@ -76,6 +76,16 @@ If your phone and PC are connected to the same Wi-Fi, you can open the **Network
 
 ---
 
+## 🚀 Quick Launch (Daily Use)
+
+When you open Termux on a new day or in a fresh session, copy-paste this single command to navigate to the project directory and launch the dashboard immediately:
+
+```bash
+cd ~/PocketStrike-AI && ./launch.sh
+```
+
+---
+
 ## 📂 Project Structure
 
 - `install.sh`: Automated package updater and dependency installer.
