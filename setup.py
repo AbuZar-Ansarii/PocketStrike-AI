@@ -87,8 +87,8 @@ def main():
         api_key = get_input("Enter Anthropic API Key")
         base_url = "https://api.anthropic.com/v1"
     elif provider_id == "ollama":
-        print(f"{BLUE}Ollama usually runs locally without an API key.{NC}")
-        base_url = get_input("Enter Ollama API Base URL", "http://localhost:11434")
+        print(f"{BLUE}Ollama configured automatically for local models (http://localhost:11434).{NC}")
+        base_url = "http://localhost:11434"
     elif provider_id == "openrouter":
         api_key = get_input("Enter OpenRouter API Key")
         base_url = "https://openrouter.ai/api/v1"
@@ -109,10 +109,10 @@ def main():
         "gemini": ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.0-pro"],
         "openai": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
         "anthropic": ["claude-3-5-sonnet-20240620", "claude-3-opus-20240229", "claude-3-haiku-20240307"],
-        "ollama": ["llama3", "phi3", "mistral", "gemma"],
+        "ollama": ["llama3", "phi3", "mistral", "gemma", "gemma4:31b-cloud", "gemini-3-flash-preview:cloud"],
         "openrouter": ["meta-llama/llama-3-8b-instruct:free", "mistralai/mistral-7b-instruct:free", "google/gemma-2-9b-it:free"],
         "opencode": ["gpt-5.2", "gpt-5.1-codex", "claude-opus-4.5", "claude-sonnet-4.5", "gemini-3-pro"],
-        "opencode_zen": ["big-pickle", "mimo", "deepseek-v3"],
+        "opencode_zen": ["big-pickle", "mimo", "deepseek-v3", "deepseek-v4-flash-free"],
         "custom": []
     }
 
