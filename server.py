@@ -262,9 +262,8 @@ def send_static(path):
 
 if __name__ == '__main__':
     import logging
-    # Suppress Werkzeug default logs and startup banner
+    # Suppress Werkzeug default log requests
     logging.getLogger('werkzeug').setLevel(logging.ERROR)
-    os.environ["WERKZEUG_RUN_MAIN"] = "true"
 
     # 1. Load config
     if not load_config():
@@ -284,12 +283,12 @@ if __name__ == '__main__':
     green_color = "\033[38;5;46m"
     white_color = "\033[38;5;255m"
     reset_color = "\033[0m"
-    banner_text = f"""{green_color}██████╗  ██████╗  ██████╗██╗  ██╗███████╗████████╗███████╗██████╗  ██╗██╗  ██╗███████╗     █████╗ ██╗
-██╔══██╗██╔═══██╗██╔════╝██║ ██╔╝██╔════╝╚══██╔══╝██╔════╝██╔══██╗ ██║██║ ██╔╝██╔════╝    ██╔══██╗██║
-{white_color}██████╔╝██║   ██║██║     █████╔╝ █████╗     ██║   ███████╗██████╔╝ ██║█████╔╝ █████╗      ███████║██║
-██╔═══╝ ██║   ██║██║     ██╔═██╗ ██╔══╝     ██║   ╚════██║██╔══██╗ ██║██╔═██╗ ██╔══╝      ██╔══██║██║
-██║     ╚██████╔╝╚██████╗██║  ██╗███████╗   ██║   ███████║██║  ██║ ██║██║  ██╗███████╗    ██║  ██║██║
-╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝ ╚═╝╚═╝  ╚═╝╚══════╝    ╚═╝  ╚═╝╚═╝{reset_color}"""
+    banner_text = f"""{green_color}██████╗ ██╗  ██╗███████╗████████╗    █████╗ ██╗
+██╔══██╗██║ ██╔╝██╔════╝╚══██╔══╝   ██╔══██╗██║
+{white_color}██████╔╝█████╔╝ ███████╗   ██║      ███████║██║
+██╔═══╝ ██╔═██╗ ╚════██║   ██║      ██╔══██║██║
+██║     ██║  ██╗███████║   ██║      ██║  ██║██║
+╚═╝     ╚═╝  ╚═╝╚══════╝   ╚═╝      ╚═╝  ╚═╝╚═╝{reset_color}"""
     print(banner_text)
     print(f"{green_color}───────────────────────── Server is Starting ─────────────────────────{reset_color}")
     print(f"  Local URL:     {white_color}http://127.0.0.1:5000{reset_color}")
@@ -301,4 +300,4 @@ if __name__ == '__main__':
 
     # Run Flask
     # Host is 0.0.0.0 so they can access it from their phone browser as well as external devices on local network
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=5000, debug=False, show_server_banner=False)
