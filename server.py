@@ -262,7 +262,9 @@ def send_static(path):
 
 if __name__ == '__main__':
     import logging
-    # Suppress Werkzeug default log requests
+    import flask.cli
+    # Suppress Flask default serving banner and Werkzeug log requests
+    flask.cli.show_server_banner = lambda *args, **kwargs: None
     logging.getLogger('werkzeug').setLevel(logging.ERROR)
 
     # 1. Load config
@@ -300,4 +302,4 @@ if __name__ == '__main__':
 
     # Run Flask
     # Host is 0.0.0.0 so they can access it from their phone browser as well as external devices on local network
-    app.run(host='0.0.0.0', port=5000, debug=False, show_server_banner=False)
+    app.run(host='0.0.0.0', port=5000, debug=False)
