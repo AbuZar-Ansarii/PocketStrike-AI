@@ -3,22 +3,29 @@ import json
 import os
 import sys
 
-# Define colors for CLI terminal
-GREEN = "\033[0;32m"
+# Define colors for CLI terminal (matching pink/violet UI gradient)
+PINK = "\033[38;5;198m"
+VIOLET = "\033[38;5;99m"
 BLUE = "\033[0;34m"
 CYAN = "\033[0;36m"
 YELLOW = "\033[1;33m"
 RED = "\033[0;31m"
 NC = "\033[0m"
 
+BANNER = f"""{PINK}██████╗  ██████╗  ██████╗██╗  ██╗███████╗████████╗███████╗██████╗  ██╗██╗  ██╗███████╗     █████╗ ██╗
+██╔══██╗██╔═══██╗██╔════╝██║ ██╔╝██╔════╝╚══██╔══╝██╔════╝██╔══██╗ ██║██║ ██╔╝██╔════╝    ██╔══██╗██║
+{VIOLET}██████╔╝██║   ██║██║     █████╔╝ █████╗     ██║   ███████╗██████╔╝ ██║█████╔╝ █████╗      ███████║██║
+██╔═══╝ ██║   ██║██║     ██╔═██╗ ██╔══╝     ██║   ╚════██║██╔══██╗ ██║██╔═██╗ ██╔══╝      ██╔══██║██║
+██║     ╚██████╔╝╚██████╗██║  ██╗███████╗   ██║   ███████║██║  ██║ ██║██║  ██╗███████╗    ██║  ██║██║
+╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝ ╚═╝╚═╝  ╚═╝╚══════╝    ╚═╝  ╚═╝╚═╝{NC}"""
+
 def clear_screen():
     os.system('clear' if os.name != 'nt' else 'cls')
 
 def print_header():
     clear_screen()
-    print(f"{CYAN}=================================================={NC}")
-    print(f"{GREEN}          PocketstrikeAI Setup Wizard             {NC}")
-    print(f"{CYAN}=================================================={NC}\n")
+    print(BANNER)
+    print(f"{PINK}──────────────────────────────────────────────────────────────────────────{NC}\n")
 
 def get_input(prompt, default=None, is_password=False):
     suffix = f" [{default}]" if default else ""

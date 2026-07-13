@@ -31,7 +31,7 @@ Follow these steps to get PocketstrikeAI running on your Android phone:
 Paste this one-line command to install Python, Git, and pip packages:
 
 ```bash
-curl -sL https://raw.githubusercontent.com/AbuZar-Ansarii/android-h4ck-ai/main/install.sh -o install.sh && chmod +x install.sh && ./install.sh
+curl -sL https://raw.githubusercontent.com/AbuZar-Ansarii/PocketStrike-AI/main/install.sh -o install.sh && chmod +x install.sh && ./install.sh
 ```
 *(Alternatively, if you cloned this folder to your Termux directory, run `./install.sh` directly)*.
 
