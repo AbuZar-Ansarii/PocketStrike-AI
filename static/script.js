@@ -623,8 +623,11 @@ function parseMarkdown(text) {
             .replace(/&lt;/g, '<')
             .replace(/&gt;/g, '>');
         return `
-            <div class="tool-result-box">
-                <div class="tool-result-header">📥 System Response [${tool}]</div>
+            <div class="tool-result-box collapsed">
+                <div class="tool-result-header" onclick="this.parentElement.classList.toggle('collapsed')">
+                    <span class="toggle-icon">▶</span>
+                    <span>📥 System Response [${tool}] (Click to Expand)</span>
+                </div>
                 <pre class="tool-result-content"><code>${cleanOutput.trim()}</code></pre>
             </div>
         `;

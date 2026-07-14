@@ -1092,3 +1092,41 @@ body.light-mode .message.system-tool-result .message-avatar svg {
     padding: 0;
 }
 
+/* Collapsible Tool Results Styling */
+.tool-result-header {
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.2s ease;
+}
+
+.tool-result-header:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+body.light-mode .tool-result-header:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.toggle-icon {
+    display: inline-block;
+    transition: transform 0.2s ease;
+    font-size: 0.6rem;
+    margin-right: 0.25rem;
+}
+
+.tool-result-box.collapsed .toggle-icon {
+    transform: rotate(0deg);
+}
+
+.tool-result-box:not(.collapsed) .toggle-icon {
+    transform: rotate(90deg);
+}
+
+.tool-result-box.collapsed .tool-result-content {
+    display: none !important;
+}
+
+.tool-result-box.collapsed .tool-result-header {
+    border-bottom: none !important;
+}
+
