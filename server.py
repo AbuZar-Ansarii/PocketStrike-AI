@@ -160,15 +160,15 @@ Available Tools:
 23. set_volume(stream, level)
     Adjusts stream volume levels. stream can be 'music', 'ring', 'alarm', 'notification', or 'system'.
 24. take_screenshot()
-    Captures the current active screen of the phone (requires local ADB wireless debugging enabled and connected).
+    Captures the current active screen of the phone (runs via local ADB or Shizuku shell).
 25. tap_screen(x, y)
-    Simulates a screen touch/tap event at coordinates (x, y) using local ADB.
+    Simulates a screen touch/tap event at coordinates (x, y) (runs via local ADB or Shizuku shell).
 26. swipe_screen(x1, y1, x2, y2, duration_ms)
-    Simulates a screen swipe gesture from (x1, y1) to (x2, y2) over the specified duration.
+    Simulates a screen swipe gesture from (x1, y1) to (x2, y2) over the specified duration (runs via local ADB or Shizuku shell).
 27. press_key(key_code)
-    Simulates a hardware key event (e.g. 3=Home, 4=Back, 26=Power, 82=Menu/Unlock) using local ADB.
+    Simulates a hardware key event (e.g. 3=Home, 4=Back, 26=Power, 82=Menu/Unlock) (runs via local ADB or Shizuku shell).
 28. launch_app(package_name)
-    Opens an application by its package name (e.g. 'com.whatsapp', 'com.android.chrome') using local ADB.
+    Opens an application by its package name (e.g. 'com.whatsapp', 'com.android.chrome') (runs via local ADB or Shizuku shell).
 29. control_android_system(action, target="")
     Executes system utility commands on the device. Supported action tokens: 'flashlight_on', 'flashlight_off', 'wifi_on', 'wifi_off', 'bluetooth_on', 'bluetooth_off', 'dark_mode_on', 'dark_mode_off', 'battery_saver_on', 'battery_saver_off', 'dnd_on', 'dnd_off', 'auto_rotate_on', 'auto_rotate_off', 'expand_notifications', 'collapse_notifications', 'get_current_app', 'type_text'. target is used for 'type_text' (specify string to type).
 
@@ -2020,9 +2020,7 @@ if __name__ == '__main__':
     # 1. Load config
     if not load_config():
         print("⚠️ Warning: config.json not found! Please run the Setup Wizard first.")
-        print("Starting anyway in fallback mode...")
-
-    # 2. Launch Telegram Bot if enabled
+        print("Starting anyway in fal    # 2. Launch Telegram Bot if enabled
     telegram_status = "Disabled"
     if config.get("telegram_enabled") and config.get("telegram_token"):
         tg_token = config["telegram_token"]
@@ -2030,7 +2028,36 @@ if __name__ == '__main__':
         telegram_bot_thread.start()
         telegram_status = "Active"
 
-    # 3. Print access information
+    # 3. Check Shizuku status dynamically
+    import shutil
+    shizuku_provisioned = shutil.which("rish") is not None
+    shizuku_status = "Not Connected"
+    
+    if shizuku_provisioned:
+        try:
+            import subprocess
+            env = os.environ.copy()
+            env["RISH_APPLICATION_ID"] = "com.termux"
+            # Fast test call to rish to check if binder is active and approved
+            res = subprocess.run(["sh", shutil.which("rish"), "-c", "echo 1"], capture_output=True, timeout=2.5, env=env)
+            if res.returncode == 0:
+                shizuku_status = "Active / Connected"
+            else:
+                shizuku_status = "Daemon Stopped (Start Shizuku app)"
+        except Exception:
+            shizuku_status = "Daemon Stopped"
+    else:
+        # Check if exported files exist in storage for auto-import
+        shizuku_src = "/sdcard/Shizuku/rish"
+        if not os.path.exists(shizuku_src):
+            shizuku_src = os.path.expanduser("~/storage/shared/Shizuku/rish")
+            
+        if os.path.exists(shizuku_src):
+            shizuku_status = "Exported Files Detected (Will auto-install)"
+        else:
+            shizuku_status = "Not Configured (Export files via Shizuku)"
+
+    # 4. Print access information
     local_ip = get_local_ip()
     green_color = "\033[38;5;46m"
     white_color = "\033[38;5;255m"
@@ -2043,11 +2070,12 @@ if __name__ == '__main__':
 ╚═╝     ╚═╝  ╚═╝╚══════╝   ╚═╝      ╚═╝  ╚═╝╚═╝{reset_color}"""
     print(banner_text)
     print(f"{green_color}───────────────────────── Server is Starting ─────────────────────────{reset_color}")
-    print(f"  Local URL:     {white_color}http://127.0.0.1:5000{reset_color}")
-    print(f"  Network URL:   {white_color}http://{local_ip}:5000{reset_color}")
-    print(f"  AI Provider:   {white_color}{config.get('provider_name', 'None')}{reset_color}")
-    print(f"  Model:         {white_color}{config.get('model', 'None')}{reset_color}")
-    print(f"  Telegram Bot:  {white_color}{telegram_status}{reset_color}")
+    print(f"  Local URL:       {white_color}http://127.0.0.1:5000{reset_color}")
+    print(f"  Network URL:     {white_color}http://{local_ip}:5000{reset_color}")
+    print(f"  AI Provider:     {white_color}{config.get('provider_name', 'None')}{reset_color}")
+    print(f"  Model:           {white_color}{config.get('model', 'None')}{reset_color}")
+    print(f"  Telegram Bot:    {white_color}{telegram_status}{reset_color}")
+    print(f"  Shizuku Status:  {white_color}{shizuku_status}{reset_color}")
     print(f"{green_color}──────────────────────────────────────────────────────────────────────{reset_color}\n")
 
     # Run Flask
