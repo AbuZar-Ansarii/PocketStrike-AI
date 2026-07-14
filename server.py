@@ -409,12 +409,58 @@ def web_search(query):
             title_clean = html_parser.unescape(re.sub(r'<[^>]*>', '', title).strip())
             snippet_clean = html_parser.unescape(re.sub(r'<[^>]*>', '', snippets[i]).strip())
             
-            results.append(f"[{i+1}] {title_clean}\nLink: {clean_href}\nSummary: {snippet_clean}")
+            results.append({
+                "index": i + 1,
+                "title": title_clean,
+                "link": clean_href,
+                "summary": snippet_clean
+            })
             
         if not results:
             return "No search results found or search was blocked by rate-limiting."
             
-        return "\n---\n".join(results)
+        # Build search results output
+        output_parts = ["=== SEARCH ENGINE SUMMARY ==="]
+        for r in results:
+            output_parts.append(f"[{r['index']}] {r['title']}\nLink: {r['link']}\nSnippet: {r['summary']}")
+            
+        # Perform Smart Fetching of actual body text for the top 2 web pages
+        fetched_count = 0
+        output_parts.append("\n=== DEEP WEB CONTENT FETCHED ===")
+        for r in results:
+            link = r['link']
+            # Skip non-crawlable domains and attachments
+            if any(domain in link.lower() for domain in ["duckduckgo.com", "google.com", "facebook.com", "twitter.com", "instagram.com"]):
+                continue
+            if link.lower().endswith((".pdf", ".zip", ".tar", ".gz", ".apk")):
+                continue
+                
+            output_parts.append(f"\n[Deep Content from Link #{r['index']}: {r['title']}]")
+            try:
+                page_res = requests.get(link, headers=headers, timeout=8)
+                if page_res.status_code == 200:
+                    page_html = page_res.text
+                    # Clean tags
+                    page_clean = re.sub(r'<(script|style).*?>([\s\S]*?)</\1>', '', page_html, flags=re.IGNORECASE)
+                    text = re.sub(r'<[^>]*>', '', page_clean)
+                    text = html_parser.unescape(text)
+                    text = re.sub(r'\n\s*\n', '\n\n', text)
+                    text = re.sub(r'[ \t]+', ' ', text)
+                    
+                    body_snippet = text.strip()[:1500]
+                    if not body_snippet:
+                        body_snippet = "Empty or failed to parse main body text."
+                    output_parts.append(body_snippet)
+                else:
+                    output_parts.append(f"Failed to load full page content (Status {page_res.status_code}).")
+            except Exception as e:
+                output_parts.append(f"Could not load full page content: {str(e)}")
+                
+            fetched_count += 1
+            if fetched_count >= 2:
+                break
+                
+        return "\n---\n".join(output_parts)
     except Exception as e:
         return f"Error performing search: {str(e)}"
 
