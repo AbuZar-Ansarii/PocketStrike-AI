@@ -37,12 +37,25 @@ cd ~/PocketStrike-AI && ./launch.sh
 
 ---
 
+## 🛡️ Local Privacy & Long-Term Memory Core
+
+PocketStrike AI is built with privacy-first principles. **Zero conversation data is leaked to external cloud history trackers.**
+
+*   **Local Web Chat History:** Your web-based conversations are saved locally in the browser (`LocalStorage`) and automatically synchronized with the Termux server via REST endpoints. The server persists them to a private local JSON database (`web_chats.json`) in your internal workspace.
+*   **Local Telegram History:** Telegram conversation streams are persisted directly on your device (`telegram_chats.json`). Even if the Termux server is restarted, the AI immediately remembers your active chat context.
+*   **Self-Evolution Memory Loop:** 
+    *   **`memory.json`**: The AI maintains a local log of user preferences, habits, working styles, and goals. It updates this file dynamically using its tools when it learns new facts about you.
+    *   **`instructions.txt`**: Saves custom behavior directives, formatting preferences, and script execution rules.
+    *   *These memory blocks are automatically re-injected into the system prompt on every turn, allowing the agent to dynamically grow and adapt specifically to you over time.*
+
+---
+
 ## 🛠️ Installation & Setup on Termux
 
 Follow these steps to configure your Termux server:
 
 ### Step 1: Clone and Run the Installer
-Launch Termux and run this one-line command to install all basic dependencies (Python, Git, Flask, Requests):
+Launch Termux and run this one-line command to install all basic dependencies (Python, Git, Flask, Requests, Termux-API, Nmap, Dnsutils, and Curl):
 ```bash
 git clone https://github.com/AbuZar-Ansarii/PocketStrike-AI.git && cd PocketStrike-AI && chmod +x install.sh && ./install.sh
 ```
@@ -69,6 +82,7 @@ Choose option `2` from the launcher. Open the **Local URL** in your phone's brow
 ---
 
 ## 🔧 ReAct Function Calling Tools
+
 PocketStrike AI has access to 34 local tools to audit, crawl, and control systems:
 
 | # | Tool Name | Description |
@@ -120,8 +134,9 @@ PocketStrike AI has access to 34 local tools to audit, crawl, and control system
 ## 📂 Project Layout
 *   `server.py`: Main Flask application, proxy APIs, stream response generators, ReAct engine, and Telegram Polling loop.
 *   `setup.py`: CLI Setup Wizard.
-*   `install.sh`: Setup dependency installer script.
+*   `install.sh`: Setup dependency installer script (downloads Python, Git, Termux-API wrapper, Android ADB tools, Nmap scanner, Dnsutils, and Curl).
 *   `launch.sh`: Main visual console launcher dashboard.
 *   `templates/index.html`: Chat dashboard template.
 *   `static/style.css`: Layout stylesheet.
 *   `static/script.js`: Event handlers, Stream EventSource reader, and Markdown parsing compiler.
+*   `LICENSE`: Open-source MIT License terms.
