@@ -11,6 +11,7 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 TERM_GREEN='\033[38;5;46m'
 TERM_WHITE='\033[38;5;255m'
+TERM_BLUE='\033[38;5;39m'
 NC='\033[0m' # No Color
 
 show_menu() {
@@ -24,12 +25,12 @@ show_menu() {
         CONFIG_EXISTS=false
     fi
 
-    echo -e "${TERM_GREEN}██████╗ ██╗  ██╗███████╗████████╗    █████╗ ██╗${NC}"
-    echo -e "${TERM_GREEN}██╔══██╗██║ ██╔╝██╔════╝╚══██╔══╝   ██╔══██╗██║${NC}"
-    echo -e "${TERM_WHITE}██████╔╝█████╔╝ ███████╗   ██║      ███████║██║${NC}"
-    echo -e "${TERM_WHITE}██╔═══╝ ██╔═██╗ ╚════██║   ██║      ██╔══██║██║${NC}"
-    echo -e "${TERM_WHITE}██║     ██║  ██╗███████║   ██║      ██║  ██║██║${NC}"
-    echo -e "${TERM_WHITE}╚═╝     ╚═╝  ╚═╝╚══════╝   ╚═╝      ╚═╝  ╚═╝╚═╝${NC}"
+    echo -e "${TERM_GREEN}██████╗  ██████╗ ██╗  ██╗███████╗████████╗    █████╗ ██╗${NC}"
+    echo -e "${TERM_GREEN}██╔══██╗██╔════╝██║ ██╔╝██╔════╝╚══██╔══╝   ██╔══██╗██║${NC}"
+    echo -e "${TERM_WHITE}██████╔╝██║     █████╔╝ ███████╗   ██║      ███████║██║${NC}"
+    echo -e "${TERM_WHITE}██╔═══╝ ██║     ██╔═██╗ ╚════██║   ██║      ██╔══██║██║${NC}"
+    echo -e "${TERM_BLUE}██║     ╚██████╗██║  ██╗███████║   ██║      ██║  ██║██║${NC}"
+    echo -e "${TERM_BLUE}╚═╝      ╚═════╝╚═╝  ╚═╝╚══════╝   ╚═╝      ╚═╝  ╚═╝╚═╝${NC}"
     echo -e "${TERM_GREEN}─────────────────────────────── Dashboard ────────────────────────────────${NC}"
     echo -e " Please choose an option:\n"
     echo -e "  ${SETUP_CHECK} 1. Run Setup Wizard"
