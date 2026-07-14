@@ -124,6 +124,8 @@ Available Tools:
    Creates or overwrites a file inside your workspace directory. Useful for saving Python scripts or files (like 'memory.json' and 'instructions.txt').
 6. run_python_script(script_name, args=[...])
    Runs a Python script written by you inside your workspace directory and returns its output. Use this to run custom scripts, write new tools, or build calculations.
+7. execute_termux_command(command)
+   Runs a shell command inside Termux (e.g. 'whoami', 'uname -a', 'ping', 'curl', 'nmap', etc.) and returns the standard output.
 
 Instructions:
 - When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
@@ -330,6 +332,33 @@ def run_python_script(script_name, args=None):
     except Exception as e:
         return f"Error running script: {str(e)}"
 
+def execute_termux_command(command):
+    # Safety filter: prevent dangerous command injections that could wipe the home directory
+    forbidden_tokens = ["rm -rf", "rm -f /", "mkfs", "dd if="]
+    for token in forbidden_tokens:
+        if token in command:
+            return f"Error: Command execution blocked. Command contains forbidden token: '{token}'"
+            
+    try:
+        import subprocess
+        # Automatically append -c 4 to ping commands if count isn't specified to prevent hanging
+        if command.strip().startswith("ping ") and "-c" not in command:
+            parts = command.strip().split()
+            parts.insert(1, "-c 4")
+            command = " ".join(parts)
+            
+        res = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=60)
+        output = f"Exit Code: {res.returncode}\n"
+        if res.stdout:
+            output += f"Stdout:\n{res.stdout}\n"
+        if res.stderr:
+            output += f"Stderr:\n{res.stderr}\n"
+        return output
+    except subprocess.TimeoutExpired:
+        return "Error: Command execution timed out (limit: 60 seconds)."
+    except Exception as e:
+        return f"Error executing command: {str(e)}"
+
 def parse_arguments(arg_str):
     if not arg_str.strip():
         return {}
@@ -400,6 +429,11 @@ def execute_local_tool(name, args_str):
             if not script_name:
                 return "Error: Missing required argument 'script_name'."
             return run_python_script(script_name, args)
+        elif name == "execute_termux_command":
+            command = kwargs.get("command")
+            if not command:
+                return "Error: Missing required argument 'command'."
+            return execute_termux_command(command)
         else:
             return f"Error: Tool '{name}' is not recognized."
     except Exception as e:
