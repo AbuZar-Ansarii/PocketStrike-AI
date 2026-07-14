@@ -144,8 +144,9 @@ async function fetchBackendStatus() {
     }
 }
 
-// Load conversations from LocalStorage
-function loadConversations() {
+// Load conversations from LocalStorage and sync with server
+async function loadConversations() {
+    // 1. Initial load from LocalStorage for instant UI render
     const saved = localStorage.getItem('pocketstrike_conversations');
     if (saved) {
         try {
@@ -161,12 +162,49 @@ function loadConversations() {
             conversations = [];
         }
     }
+    
+    // 2. Fetch latest history from the server (local disk) to sync
+    try {
+        const response = await fetch('/api/history/load');
+        if (response.ok) {
+            const serverConversations = await response.json();
+            if (serverConversations && serverConversations.length > 0) {
+                conversations = serverConversations;
+                
+                // Set active conversation if not set or invalid
+                const savedActiveId = localStorage.getItem('pocketstrike_active_id');
+                if (savedActiveId && conversations.some(c => c.id === savedActiveId)) {
+                    activeConversationId = savedActiveId;
+                } else {
+                    activeConversationId = conversations[0].id;
+                }
+                
+                // Save back to LocalStorage to sync
+                localStorage.setItem('pocketstrike_conversations', JSON.stringify(conversations));
+                localStorage.setItem('pocketstrike_active_id', activeConversationId);
+                renderAll();
+            }
+        }
+    } catch (error) {
+        console.error('Error loading history from server:', error);
+    }
 }
 
-// Save conversations to LocalStorage
-function saveConversations() {
+// Save conversations to LocalStorage and sync to server
+async function saveConversations() {
     localStorage.setItem('pocketstrike_conversations', JSON.stringify(conversations));
     localStorage.setItem('pocketstrike_active_id', activeConversationId);
+    
+    // Sync to server background file storage
+    try {
+        await fetch('/api/history/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(conversations)
+        });
+    } catch (e) {
+        console.error('Failed to sync history to server:', e);
+    }
 }
 
 // Create a new empty chat conversation

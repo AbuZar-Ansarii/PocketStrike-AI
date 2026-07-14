@@ -108,10 +108,15 @@ Your workspace directory is: {WORKSPACE_DIR} (which is located in the phone's in
 All file tools (list_directory, read_file_content, write_file_content, run_python_script) resolve relative paths inside this workspace directory. Always write/save files requested by the user inside this workspace folder.
 Critical: You are forbidden from modifying, writing, or deleting files outside this workspace directory, especially the server's own scripts (server.py, setup.py, launch.sh, etc.) to prevent messing with your own running code.
 
-AI PERSISTENT MEMORY (Use write_file_content to update 'memory.json' to store facts, user preferences, configurations, or network details):
+AI PERSISTENT MEMORY (Stored locally and privately on user's device):
+You are a privacy-focused, self-evolving AI. You must actively maintain a deep understanding of the user.
+Whenever the user shares their name, preferences, goals, habits, working style, or local system parameters, you MUST immediately call write_file_content to save these facts in 'memory.json'. This forms your long-term memory and is re-injected on every single turn.
+Current Memory:
 {memory_content}
 
-AI SELF-EVOLUTION INSTRUCTIONS (Use write_file_content to update 'instructions.txt' to add new behavioral rules or instructions for yourself):
+AI SELF-EVOLUTION INSTRUCTIONS (Stored locally and privately on user's device):
+Use write_file_content to update 'instructions.txt' to add new behavioral rules, customized script styles, or operational guidelines for yourself as you grow with the user.
+Current Instructions:
 {instructions_content}
 
 If you need to use a tool to answer the user's request, you must respond with EXACTLY this trigger format and nothing else in that turn:
@@ -1983,10 +1988,30 @@ def call_ai_api(messages):
     except Exception as e:
         return f"Request Error: {str(e)}"
 
+def load_telegram_sessions():
+    tg_file = os.path.join(WORKSPACE_DIR, "telegram_chats.json")
+    if os.path.exists(tg_file):
+        try:
+            with open(tg_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return {int(k): v for k, v in data.items()}
+        except Exception as e:
+            print(f"Error loading telegram sessions: {e}")
+    return {}
+
+def save_telegram_sessions(sessions):
+    tg_file = os.path.join(WORKSPACE_DIR, "telegram_chats.json")
+    try:
+        os.makedirs(os.path.dirname(tg_file), exist_ok=True)
+        with open(tg_file, "w", encoding="utf-8") as f:
+            json.dump({str(k): v for k, v in sessions.items()}, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"Error saving telegram sessions: {e}")
+
 # Telegram Bot Polling Thread
 def telegram_bot_loop(token):
     offset = 0
-    sessions = {} # Holds history for each telegram user: chat_id -> list of messages
+    sessions = load_telegram_sessions()
     print(f"Telegram Bot started polling...")
     
     while True:
@@ -2023,6 +2048,7 @@ def telegram_bot_loop(token):
                     sessions[chat_id] = [
                         {"role": "system", "content": "You are PocketstrikeAI, a helpful, cool, and highly advanced local AI assistant. Keep responses engaging."}
                     ]
+                    save_telegram_sessions(sessions)
                     welcome_text = "⚡ **PocketstrikeAI Online** ⚡\n\nHello! I am your AI assistant running locally on Termux. Ask me anything!"
                     send_telegram_msg(token, chat_id, welcome_text)
                     continue
@@ -2046,6 +2072,7 @@ def telegram_bot_loop(token):
                 # Get AI answer (handles ReAct tool calls internally)
                 ai_response, updated_history = get_ai_response_with_tools(sessions[chat_id])
                 sessions[chat_id] = updated_history
+                save_telegram_sessions(sessions)
                 
                 # Check if camera photo was successfully captured in the chat session
                 photo_path = os.path.join(WORKSPACE_DIR, "captured_photo.jpg")
@@ -2102,6 +2129,29 @@ def send_telegram_photo(token, chat_id, photo_path, caption=None):
         return False
 
 # Web Server Routes
+@app.route('/api/history/load', methods=['GET'])
+def load_history():
+    history_file = os.path.join(WORKSPACE_DIR, "web_chats.json")
+    if os.path.exists(history_file):
+        try:
+            with open(history_file, "r", encoding="utf-8") as f:
+                return jsonify(json.load(f))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return jsonify([])
+
+@app.route('/api/history/sync', methods=['POST'])
+def sync_history():
+    data = request.json or []
+    history_file = os.path.join(WORKSPACE_DIR, "web_chats.json")
+    try:
+        os.makedirs(os.path.dirname(history_file), exist_ok=True)
+        with open(history_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/')
 def home():
     return render_template('index.html')
