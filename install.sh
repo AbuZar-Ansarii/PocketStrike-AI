@@ -29,10 +29,10 @@ else
     exit 1
 fi
 
-# 2. Install Python and Git
-echo -e "\n${BLUE}[2/4] Installing Python and Git...${NC}"
-pkg install -y python git || {
-    echo -e "${RED}Error: Failed to install python and git. Please check your internet connection or Termux repositories.${NC}"
+# 2. Install Python, Git, Termux-API, and Android-Tools
+echo -e "\n${BLUE}[2/4] Installing Python, Git, Termux-API, and Android-Tools...${NC}"
+pkg install -y python git termux-api android-tools || {
+    echo -e "${RED}Error: Failed to install required system packages. Please check your internet connection or Termux repositories.${NC}"
     exit 1
 }
 
