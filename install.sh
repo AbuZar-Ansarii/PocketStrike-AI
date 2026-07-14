@@ -36,6 +36,11 @@ pkg install -y python git || {
     exit 1
 }
 
+# Setup storage access and create workspace directory
+echo -e "\n${BLUE}Configuring Android storage permission...${NC}"
+termux-setup-storage || echo -e "${YELLOW}Warning: termux-setup-storage failed (not running on Termux?), proceeding anyway...${NC}"
+mkdir -p ~/storage/shared/PocketStrike-AI || echo -e "${YELLOW}Warning: Could not create shared storage folder, proceeding...${NC}"
+
 # 3. Clone repository if launch.sh doesn't exist (e.g. running via curl download)
 CLONED=false
 if [ ! -f "launch.sh" ]; then

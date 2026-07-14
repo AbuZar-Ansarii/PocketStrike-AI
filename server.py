@@ -49,23 +49,35 @@ def get_local_ip():
 # CUSTOM AI TOOLS DEFINITIONS
 # ==========================================
 
+# Define Android Internal Storage Workspace Folder
+WORKSPACE_DIR = os.path.expanduser("~/storage/shared/PocketStrike-AI")
+try:
+    os.makedirs(WORKSPACE_DIR, exist_ok=True)
+except Exception:
+    # Fallback to local project workspace folder if running on PC or not accessible
+    WORKSPACE_DIR = os.path.abspath("workspace")
+    os.makedirs(WORKSPACE_DIR, exist_ok=True)
+
 def get_system_prompt():
-    return """You are PKST AI, a powerful local security and system assistant running in Termux on the user's Android phone.
+    return f"""You are PKST AI, a powerful local security and system assistant running in Termux on the user's Android phone.
 You have access to local tools that can inspect system state, perform network scans, and read/write files.
+Your workspace directory is: {WORKSPACE_DIR} (which is located in the phone's internal storage).
+All file tools (list_directory, read_file_content, write_file_content) resolve relative paths inside this workspace directory. Always write/save files requested by the user inside this workspace folder.
+
 If you need to use a tool to answer the user's request, you must respond with EXACTLY this trigger format and nothing else in that turn:
 [TOOL_CALL: tool_name(arg1="value", arg2="value")]
 
 Available Tools:
 1. get_system_stats()
-   Returns battery level, charging status, free RAM, and storage space in Termux home.
+   Returns battery level, charging status, free RAM, and storage space in Termux.
 2. local_port_scan(target_ip, ports_list=[...])
    Scans a target IP address for open ports. Use lists like [22, 80, 443]. Keep target list short.
 3. list_directory(path=".")
-   Lists files and directories at the given path (default: current directory).
+   Lists files and directories. Defaults to your workspace directory ({WORKSPACE_DIR}).
 4. read_file_content(file_path)
-   Reads the content of a text file.
+   Reads the content of a text file inside your workspace directory.
 5. write_file_content(file_path, content)
-   Creates or overwrites a file with content. Useful for writing scripts.
+   Creates or overwrites a file inside your workspace directory. Useful for saving Python scripts or files.
 
 Instructions:
 - When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
@@ -164,14 +176,21 @@ def local_port_scan(target_ip, ports_list=None):
     return json.dumps(results, indent=2)
 
 def list_directory(path="."):
-    expanded_path = os.path.abspath(os.path.expanduser(path))
-    if not os.path.exists(expanded_path):
+    if path == "." or not path:
+        target_path = WORKSPACE_DIR
+    else:
+        if not os.path.isabs(os.path.expanduser(path)):
+            target_path = os.path.abspath(os.path.join(WORKSPACE_DIR, path))
+        else:
+            target_path = os.path.abspath(os.path.expanduser(path))
+            
+    if not os.path.exists(target_path):
         return f"Error: Path '{path}' does not exist."
     try:
-        items = os.listdir(expanded_path)
+        items = os.listdir(target_path)
         results = []
         for item in items:
-            item_path = os.path.join(expanded_path, item)
+            item_path = os.path.join(target_path, item)
             is_dir = os.path.isdir(item_path)
             size = os.path.getsize(item_path) if not is_dir else 0
             results.append({
@@ -184,15 +203,18 @@ def list_directory(path="."):
         return f"Error listing directory: {str(e)}"
 
 def read_file_content(file_path):
-    expanded_path = os.path.abspath(os.path.expanduser(file_path))
-    if not os.path.exists(expanded_path):
+    if not os.path.isabs(os.path.expanduser(file_path)):
+        target_path = os.path.abspath(os.path.join(WORKSPACE_DIR, file_path))
+    else:
+        target_path = os.path.abspath(os.path.expanduser(file_path))
+        
+    if not os.path.exists(target_path):
         return f"Error: File '{file_path}' does not exist."
-    if os.path.isdir(expanded_path):
+    if os.path.isdir(target_path):
         return f"Error: '{file_path}' is a directory. Use list_directory to see its contents."
         
     try:
-        # Limit reading to first 15,000 characters to avoid token limit issues
-        with open(expanded_path, "r", encoding="utf-8", errors="ignore") as f:
+        with open(target_path, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read(15000)
             if len(content) >= 15000:
                 return content + "\n\n[Content truncated due to size limit...]"
@@ -201,12 +223,16 @@ def read_file_content(file_path):
         return f"Error reading file: {str(e)}"
 
 def write_file_content(file_path, content):
-    expanded_path = os.path.abspath(os.path.expanduser(file_path))
+    if not os.path.isabs(os.path.expanduser(file_path)):
+        target_path = os.path.abspath(os.path.join(WORKSPACE_DIR, file_path))
+    else:
+        target_path = os.path.abspath(os.path.expanduser(file_path))
+        
     try:
-        os.makedirs(os.path.dirname(expanded_path), exist_ok=True)
-        with open(expanded_path, "w", encoding="utf-8") as f:
+        os.makedirs(os.path.dirname(target_path), exist_ok=True)
+        with open(target_path, "w", encoding="utf-8") as f:
             f.write(content)
-        return f"Success: File '{file_path}' written successfully."
+        return f"Success: File '{file_path}' written successfully at: {target_path}."
     except Exception as e:
         return f"Error writing file: {str(e)}"
 
