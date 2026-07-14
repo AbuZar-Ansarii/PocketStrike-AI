@@ -2020,7 +2020,8 @@ if __name__ == '__main__':
     # 1. Load config
     if not load_config():
         print("⚠️ Warning: config.json not found! Please run the Setup Wizard first.")
-        print("Starting anyway in fal    # 2. Launch Telegram Bot if enabled
+        print("Starting anyway in fallback mode.")
+    # 2. Launch Telegram Bot if enabled
     telegram_status = "Disabled"
     if config.get("telegram_enabled") and config.get("telegram_token"):
         tg_token = config["telegram_token"]
