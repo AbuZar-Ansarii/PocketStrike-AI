@@ -2064,6 +2064,45 @@ if __name__ == '__main__':
     shizuku_provisioned = shutil.which("rish") is not None
     shizuku_status = "Not Connected"
     
+    # Auto-provision on startup if not in PATH but files exist
+    if not shizuku_provisioned:
+        possible_srcs = [
+            "/sdcard/Shizuku/rish",
+            "/storage/emulated/0/Shizuku/rish",
+            os.path.expanduser("~/storage/shared/Shizuku/rish"),
+            os.path.expanduser("~/storage/downloads/rish"),
+            os.path.expanduser("~/storage/downloads/Shizuku/rish"),
+            "/sdcard/Download/rish",
+            "/sdcard/Download/Shizuku/rish",
+            "/storage/emulated/0/Download/rish",
+            "/storage/emulated/0/Download/Shizuku/rish",
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "rish")),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "workspace", "rish"))
+        ]
+        shizuku_src = None
+        for path in possible_srcs:
+            if os.path.exists(path):
+                shizuku_src = path
+                break
+        if shizuku_src:
+            try:
+                prefix = os.environ.get("PREFIX", "/data/data/com.termux/files/usr")
+                termux_bin = os.path.join(prefix, "bin")
+                if os.path.exists(termux_bin):
+                    import glob
+                    src_dir = os.path.dirname(shizuku_src)
+                    for fpath in glob.glob(os.path.join(src_dir, "rish*")):
+                        dest_file = os.path.join(termux_bin, os.path.basename(fpath))
+                        shutil.copy(fpath, dest_file)
+                    os.chmod(os.path.join(termux_bin, "rish"), 0o755)
+                    dex_file = os.path.join(termux_bin, "rish_shizuku.dex")
+                    if os.path.exists(dex_file):
+                        os.chmod(dex_file, 0o444)
+                    shizuku_provisioned = True
+                    print("PocketstrikeAI: Auto-installed Shizuku rish binaries on startup!")
+            except Exception as e:
+                print(f"PocketstrikeAI: Startup Shizuku auto-install failed: {e}")
+
     if shizuku_provisioned:
         try:
             import subprocess
@@ -2080,9 +2119,40 @@ if __name__ == '__main__':
             else:
                 out = res.stdout.decode('utf-8', errors='ignore').strip() if res.stdout else ""
                 err = res.stderr.decode('utf-8', errors='ignore').strip() if res.stderr else ""
-                print(f"⚠️ Shizuku test failed (code {res.returncode}). stdout: '{out}', stderr: '{err}'")
-                if "permission" in err.lower() or "permission" in out.lower():
-                    shizuku_status = "Unauthorized (Approve Termux in Shizuku)"
+                
+                # If unauthorized, try to auto-trigger the permission popup via a PTY terminal mock!
+                if res.returncode == 1 or "permission" in err.lower() or "permission" in out.lower():
+                    print("\n\033[1;33m📣 [Shizuku Authorization Required]\033[0m")
+                    print("\033[38;5;46m  Please check your phone screen now!\033[0m")
+                    print("\033[38;5;255m  A popup will request permission for Termux to access Shizuku.\033[0m")
+                    print("\033[1;32m  👉 Tap 'Always Allow' or 'Allow' to authorize the agent. 👈\033[0m\n")
+                    
+                    try:
+                        import pty
+                        master, slave = pty.openpty()
+                        # Spawn rish in a pty so it thinks it is in an interactive terminal and triggers popup
+                        p = subprocess.Popen(
+                            [shutil.which("rish")],
+                            stdin=slave,
+                            stdout=slave,
+                            stderr=slave,
+                            env=env,
+                            preexec_fn=os.setsid if hasattr(os, 'setsid') else None
+                        )
+                        # Keep it open for 8 seconds to give user time to click Allow
+                        time.sleep(8.0)
+                        p.terminate()
+                        p.wait(timeout=2.0)
+                    except Exception as pty_err:
+                        print(f"  (Failed to start pty trigger: {pty_err})")
+                        
+                    # Re-test connection state
+                    res_retry = subprocess.run([shell_exe, shutil.which("rish"), "-c", "echo 1"], capture_output=True, timeout=4.5, env=env)
+                    if res_retry.returncode == 0:
+                        print("\033[38;5;46m[✓] Shizuku authorization successful!\033[0m\n")
+                        shizuku_status = "Active / Connected"
+                    else:
+                        shizuku_status = "Unauthorized (Approve Termux in Shizuku)"
                 else:
                     shizuku_status = "Daemon Stopped (Start Shizuku app)"
         except subprocess.TimeoutExpired:
@@ -2092,31 +2162,7 @@ if __name__ == '__main__':
             print(f"⚠️ Shizuku test error: {str(e)}")
             shizuku_status = f"Daemon Stopped ({type(e).__name__})"
     else:
-        # Check if exported files exist in storage for auto-import
-        possible_srcs = [
-            "/sdcard/Shizuku/rish",
-            "/storage/emulated/0/Shizuku/rish",
-            os.path.expanduser("~/storage/shared/Shizuku/rish"),
-            os.path.expanduser("~/storage/downloads/rish"),
-            os.path.expanduser("~/storage/downloads/Shizuku/rish"),
-            "/sdcard/Download/rish",
-            "/sdcard/Download/Shizuku/rish",
-            "/storage/emulated/0/Download/rish",
-            "/storage/emulated/0/Download/Shizuku/rish",
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "rish")),
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "workspace", "rish"))
-        ]
-        
-        shizuku_src = None
-        for path in possible_srcs:
-            if os.path.exists(path):
-                shizuku_src = path
-                break
-                
-        if shizuku_src:
-            shizuku_status = "Exported Files Detected (Will auto-install)"
-        else:
-            shizuku_status = "Not Configured (Export files via Shizuku)"
+        shizuku_status = "Not Configured (Export files via Shizuku)"
 
     # 4. Print access information
     local_ip = get_local_ip()
