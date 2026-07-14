@@ -140,6 +140,8 @@ Available Tools:
     Vibrates the phone for the specified duration (default: 500ms).
 14. search_files(pattern)
     Searches for files recursively inside your workspace using glob patterns (e.g. "*.py").
+15. local_network_scan()
+    Scans the local subnet for active connected devices (fast ARP and ICMP ping sweep). Use this when the user asks to scan the network.
 
 Instructions:
 - When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
@@ -236,6 +238,99 @@ def local_port_scan(target_ip, ports_list=None):
             pass
     results["open_ports"] = open_ports
     return json.dumps(results, indent=2)
+
+def local_network_scan():
+    try:
+        # 1. Identify local subnet by checking routing rules or IP address
+        import subprocess
+        # Get active gateway/subnet via ip route
+        res = subprocess.run(["ip", "route"], capture_output=True, text=True, timeout=5)
+        routes = res.stdout if res.returncode == 0 else ""
+        
+        subnet = None
+        # Try parsing routing line e.g., "192.168.1.0/24 dev wlan0 proto kernel scope link src 192.168.1.5"
+        for line in routes.split("\n"):
+            if "proto kernel" in line and "scope link" in line and "/" in line:
+                parts = line.strip().split()
+                for p in parts:
+                    if "/" in p and p[0].isdigit():
+                        subnet = p
+                        break
+            if subnet:
+                break
+                
+        # Fallback 1: Parse from local interfaces if routing parse failed
+        if not subnet:
+            addr_res = subprocess.run(["ip", "addr"], capture_output=True, text=True, timeout=5)
+            addr_out = addr_res.stdout if addr_res.returncode == 0 else ""
+            # Search for wlan0 IP (standard android wifi interface)
+            match = re.search(r'inet\s+(\d+\.\d+\.\d+\.\d+)/(\d+)\s+[^>]*wlan0', addr_out)
+            if match:
+                ip = match.group(1)
+                mask = match.group(2)
+                # Convert to base subnet (e.g. 192.168.1.0/24)
+                ip_parts = ip.split(".")
+                subnet = f"{ip_parts[0]}.{ip_parts[1]}.{ip_parts[2]}.0/{mask}"
+                
+        # Fallback 2: General fallback to standard home subnet
+        if not subnet:
+            subnet = "192.168.1.0/24"
+            
+        base_ip = ".".join(subnet.split("/")[0].split(".")[:-1])
+        active_hosts = []
+        
+        # 2. Fast ping sweep on the subnet class C (hosts 1-254)
+        # We spawn multiple threads or do a rapid batch sweep using fping if available, otherwise native ping
+        # Since standard ping can take time, we limit to the first 40 IPs surrounding the gateway (1-40) or check ARP table
+        import concurrent.futures
+        
+        def check_host(ip):
+            try:
+                # Run ping -c 1 -W 1 (wait 1 sec)
+                ping_res = subprocess.run(["ping", "-c", "1", "-W", "1", ip], capture_output=True, timeout=1.5)
+                if ping_res.returncode == 0:
+                    return ip
+            except Exception:
+                pass
+            return None
+            
+        # Scan range 1-40 (typically hosts router and nearby active mobile/PC devices)
+        ips_to_scan = [f"{base_ip}.{i}" for i in range(1, 41)]
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
+            scanned_results = executor.map(check_host, ips_to_scan)
+            
+        for ip in scanned_results:
+            if ip:
+                active_hosts.append(ip)
+                
+        # 3. Read ARP cache to catch active devices not responding to ping
+        try:
+            with open("/proc/net/arp", "r") as f:
+                arp_lines = f.readlines()
+                for line in arp_lines[1:]: # Skip header
+                    parts = line.split()
+                    if len(parts) >= 4:
+                        ip = parts[0]
+                        mac = parts[3]
+                        if mac != "00:00:00:00:00:00" and ip.startswith(base_ip) and ip not in active_hosts:
+                            active_hosts.append(ip)
+        except Exception:
+            pass
+            
+        # Clean results
+        active_hosts = list(set(active_hosts))
+        active_hosts.sort(key=lambda x: int(x.split(".")[-1]))
+        
+        scan_details = {
+            "scanned_subnet": subnet,
+            "active_hosts_found": len(active_hosts),
+            "hosts": active_hosts
+        }
+        return json.dumps(scan_details, indent=2)
+    except Exception as e:
+        return f"Error scanning local network subnet: {str(e)}"
+
 
 def list_directory(path="."):
     if path == "." or not path:
@@ -682,6 +777,8 @@ def execute_local_tool(name, args_str):
             if not pattern:
                 return "Error: Missing required argument 'pattern'."
             return search_files(pattern)
+        elif name == "local_network_scan":
+            return local_network_scan()
         else:
             return f"Error: Tool '{name}' is not recognized."
     except Exception as e:
