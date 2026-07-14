@@ -15,7 +15,7 @@ Additionally, it integrates a **Telegram Bot** backend, allowing you to trigger 
 ## 🚀 Daily Quick Launch (One-Liner)
 If you already completed the setup, open Termux and run this single command to launch your dashboard:
 ```bash
-cd ~/PocketStrike-AI && ./launch.sh
+cd ~/PocketStrike-AI && bash launch.sh
 ```
 
 ---
@@ -75,14 +75,22 @@ Follow these steps to configure your Termux server:
 ### Step 1: Clone and Run the Installer
 Launch Termux and run this one-line command to install all basic dependencies (Python, Git, Flask, Requests, Termux-API, Nmap, Dnsutils, Curl, Net-Tools, Iproute2, and Traceroute):
 ```bash
-git clone https://github.com/AbuZar-Ansarii/PocketStrike-AI.git && cd PocketStrike-AI && sed -i 's/\r$//' install.sh && chmod +x install.sh && ./install.sh
+git clone https://github.com/AbuZar-Ansarii/PocketStrike-AI.git && cd PocketStrike-AI && sed -i 's/\r$//' install.sh && bash install.sh
 ```
 *Note: During installation, the script will request Android Storage Permissions (`termux-setup-storage`). Tap "Allow" on the system popup.*
+
+> [!TIP]
+> **Getting "CANNOT LINK EXECUTABLE" Error?**
+> This is a common Termux issue caused by a corrupted/outdated Termux environment (e.g. if installed from Google Play instead of F-Droid). Fix your Termux package manager by running:
+> ```bash
+> pkg update -y && pkg upgrade -y
+> ```
+> If Termux is completely locked, uninstall your current version and download the official updated build from **F-Droid** or **GitHub Releases**.
 
 ### Step 2: Configure Setup Wizard
 Run the launcher:
 ```bash
-./launch.sh
+bash launch.sh
 ```
 1. Select option `1` to run the **Setup Wizard**.
 2. Select your AI provider and fill in the details:
