@@ -20,6 +20,24 @@ cd ~/PocketStrike-AI && ./launch.sh
 
 ---
 
+## 📂 Project Structure
+```text
+📂 PocketStrike-AI/
+├── 📄 LICENSE                # Open-source MIT License terms
+├── 📄 README.md              # Detailed documentation, guides, and tool specifications
+├── 📄 install.sh             # Dependency installer (Python, Git, Termux-API, Nmap, Curl, etc.)
+├── 📄 launch.sh              # Terminal-based visual launcher dashboard and status check
+├── 📄 server.py              # Main Flask server, AI ReAct framework, and Telegram bot loop
+├── 📄 setup.py              # CLI Setup Wizard for API keys and Telegram bot options
+├── 📂 static/                # Static assets for the Web chat interface
+│   ├── 📄 script.js          # Web event handling, EventSource streaming, and markdown parsing
+│   └── 📄 style.css          # obsidian-dark / royal-blue responsive layout stylesheet
+└── 📂 templates/             # HTML Templates
+    └── 📄 index.html         # Glassmorphic, modern chat dashboard interface
+```
+
+---
+
 ## ✨ Features
 
 *   **Beautiful Responsive UI**: Stunning default Obsidian Dark Mode (with Emerald Green highlights) and a clean Royal Blue Light Mode. Features a glassmorphic sidebar for chat history, editable chat sessions, and instant message copying.
@@ -129,14 +147,3 @@ PocketStrike AI has access to 34 local tools to audit, crawl, and control system
 *   **Core Code Protection**: Overwriting or modifying critical codebase files (like `server.py`, `setup.py`, `launch.sh`, etc.) is blocked by name, keeping the AI from corrupting its own server threads.
 *   **Command Filter**: `execute_termux_command` filters and blocks dangerous destructive tokens (such as `rm -rf`, `rm -f /`, `mkfs`, `dd`) to protect the device.
 
----
-
-## 📂 Project Layout
-*   `server.py`: Main Flask application, proxy APIs, stream response generators, ReAct engine, and Telegram Polling loop.
-*   `setup.py`: CLI Setup Wizard.
-*   `install.sh`: Setup dependency installer script (downloads Python, Git, Termux-API wrapper, Android ADB tools, Nmap scanner, Dnsutils, and Curl).
-*   `launch.sh`: Main visual console launcher dashboard.
-*   `templates/index.html`: Chat dashboard template.
-*   `static/style.css`: Layout stylesheet.
-*   `static/script.js`: Event handlers, Stream EventSource reader, and Markdown parsing compiler.
-*   `LICENSE`: Open-source MIT License terms.
