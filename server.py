@@ -147,6 +147,28 @@ Available Tools:
     Audits the Android device's firmware release version, developer options (USB debugging), root signature binary trails, and outdated packages.
 17. subnet_port_sweep(port_number)
     Performs a high-speed parallel sweep checking which hosts on the local network subnet have a specific port open (e.g., check for SSH port 22 or HTTP port 80).
+18. take_camera_photo(camera_id="0")
+    Captures a photo using the phone's front ("1") or back ("0") camera and saves it to the workspace.
+19. get_phone_location()
+    Retrieves GPS coordinates of the phone (latitude, longitude, altitude, accuracy).
+20. make_phone_call(phone_number)
+    Places an outgoing phone call to the specified number.
+21. send_sms(phone_number, message)
+    Sends an SMS text message to the specified phone number.
+22. set_brightness(level)
+    Adjusts screen brightness level (0 to 255).
+23. set_volume(stream, level)
+    Adjusts stream volume levels. stream can be 'music', 'ring', 'alarm', 'notification', or 'system'.
+24. take_screenshot()
+    Captures the current active screen of the phone (requires local ADB wireless debugging enabled and connected).
+25. tap_screen(x, y)
+    Simulates a screen touch/tap event at coordinates (x, y) using local ADB.
+26. swipe_screen(x1, y1, x2, y2, duration_ms)
+    Simulates a screen swipe gesture from (x1, y1) to (x2, y2) over the specified duration.
+27. press_key(key_code)
+    Simulates a hardware key event (e.g. 3=Home, 4=Back, 26=Power, 82=Menu/Unlock) using local ADB.
+28. launch_app(package_name)
+    Opens an application by its package name (e.g. 'com.whatsapp', 'com.android.chrome') using local ADB.
 
 Instructions:
 - When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
