@@ -965,6 +965,10 @@ def run_adb_command(cmd_str):
             # Set application environment ID required by Shizuku binder API
             env = os.environ.copy()
             env["RISH_APPLICATION_ID"] = "com.termux"
+            # Clear Termux library paths so system app_process works correctly
+            env.pop("LD_LIBRARY_PATH", None)
+            env.pop("LD_PRELOAD", None)
+            shell_exe = "/system/bin/sh" if os.path.exists("/system/bin/sh") else "sh"
             
             # Route ADB shell commands directly through Shizuku Binder API
             if cmd_str.startswith("shell "):
@@ -974,7 +978,7 @@ def run_adb_command(cmd_str):
                 if shell_cmd == "screencap -p":
                     return True, "STDOUT_STREAMING_ACTIVE"
                     
-                res = subprocess.run(["sh", rish_path, "-c", shell_cmd], capture_output=True, text=True, timeout=15, env=env)
+                res = subprocess.run([shell_exe, rish_path, "-c", shell_cmd], capture_output=True, text=True, timeout=15, env=env)
                 if res.returncode == 0:
                     return True, res.stdout
                 return False, res.stderr
@@ -990,7 +994,7 @@ def run_adb_command(cmd_str):
                     try:
                         # Copy via local Shizuku cat transfer
                         with open(dest, "wb") as f:
-                            subprocess.run(["sh", rish_path, "-c", f"cat {src}"], stdout=f, env=env, timeout=15)
+                            subprocess.run([shell_exe, rish_path, "-c", f"cat {src}"], stdout=f, env=env, timeout=15)
                         return True, "Pulled via Shizuku shell cat"
                     except Exception as e:
                         return False, f"Shizuku cat transfer error: {e}"
@@ -1022,10 +1026,13 @@ def take_screenshot():
         
         env = os.environ.copy()
         env["RISH_APPLICATION_ID"] = "com.termux"
+        env.pop("LD_LIBRARY_PATH", None)
+        env.pop("LD_PRELOAD", None)
+        shell_exe = "/system/bin/sh" if os.path.exists("/system/bin/sh") else "sh"
         
         try:
             with open(target_path, "wb") as f:
-                res = subprocess.run(["sh", rish_path, "-c", "screencap -p"], stdout=f, env=env, timeout=20)
+                res = subprocess.run([shell_exe, rish_path, "-c", "screencap -p"], stdout=f, env=env, timeout=20)
             if res.returncode == 0 and os.path.exists(target_path) and os.path.getsize(target_path) > 0:
                 return f"Success: Screenshot captured via Shizuku. Saved to workspace as '{target_name}'. Path: {target_path}."
         except Exception as e:
@@ -2039,8 +2046,12 @@ if __name__ == '__main__':
             import subprocess
             env = os.environ.copy()
             env["RISH_APPLICATION_ID"] = "com.termux"
+            env.pop("LD_LIBRARY_PATH", None)
+            env.pop("LD_PRELOAD", None)
+            shell_exe = "/system/bin/sh" if os.path.exists("/system/bin/sh") else "sh"
+            
             # Fast test call to rish to check if binder is active and approved
-            res = subprocess.run(["sh", shutil.which("rish"), "-c", "echo 1"], capture_output=True, timeout=2.5, env=env)
+            res = subprocess.run([shell_exe, shutil.which("rish"), "-c", "echo 1"], capture_output=True, timeout=4.5, env=env)
             if res.returncode == 0:
                 shizuku_status = "Active / Connected"
             else:
