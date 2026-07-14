@@ -75,7 +75,7 @@ Follow these steps to configure your Termux server:
 ### Step 1: Clone and Run the Installer
 Launch Termux and run this one-line command to install all basic dependencies (Python, Git, Flask, Requests, Termux-API, Nmap, Dnsutils, Curl, Net-Tools, Iproute2, and Traceroute):
 ```bash
-git clone https://github.com/AbuZar-Ansarii/PocketStrike-AI.git && cd PocketStrike-AI && chmod +x install.sh && ./install.sh
+git clone https://github.com/AbuZar-Ansarii/PocketStrike-AI.git && cd PocketStrike-AI && sed -i 's/\r$//' install.sh && chmod +x install.sh && ./install.sh
 ```
 *Note: During installation, the script will request Android Storage Permissions (`termux-setup-storage`). Tap "Allow" on the system popup.*
 
