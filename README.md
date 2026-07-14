@@ -73,7 +73,7 @@ PocketStrike AI is built with privacy-first principles. **Zero conversation data
 Follow these steps to configure your Termux server:
 
 ### Step 1: Clone and Run the Installer
-Launch Termux and run this one-line command to install all basic dependencies (Python, Git, Flask, Requests, Termux-API, Nmap, Dnsutils, and Curl):
+Launch Termux and run this one-line command to install all basic dependencies (Python, Git, Flask, Requests, Termux-API, Nmap, Dnsutils, Curl, Net-Tools, Iproute2, and Traceroute):
 ```bash
 git clone https://github.com/AbuZar-Ansarii/PocketStrike-AI.git && cd PocketStrike-AI && chmod +x install.sh && ./install.sh
 ```

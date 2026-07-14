@@ -31,7 +31,7 @@ fi
 
 # 2. Install required system and network tools
 echo -e "\n${BLUE}[2/4] Installing required system and network tools...${NC}"
-pkg install -y python git termux-api android-tools nmap dnsutils curl || {
+pkg install -y python git termux-api android-tools nmap dnsutils curl net-tools iproute2 traceroute || {
     echo -e "${RED}Error: Failed to install required system packages. Please check your internet connection or Termux repositories.${NC}"
     exit 1
 }
