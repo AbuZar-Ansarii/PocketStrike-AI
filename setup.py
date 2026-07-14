@@ -158,7 +158,55 @@ def main():
             print(f"{YELLOW}Warning: Telegram token was empty, disabling Telegram support.{NC}")
             telegram_enabled = False
 
-    # 5. Build and save the config object
+    # 5. Shizuku Phone Control Setup
+    shizuku_enabled = False
+    print(f"\n{YELLOW}Shizuku Phone Remote Control Setup:{NC}")
+    sz_choice = get_input("Do you want to enable Shizuku phone remote control? (y/n)", "y").lower()
+    
+    if sz_choice in ["y", "yes"]:
+        import shutil
+        rish_path = shutil.which("rish")
+        
+        if rish_path:
+            print(f"{GREEN}[✓] Shizuku 'rish' client is already installed in your Termux PATH.{NC}")
+            shizuku_enabled = True
+        else:
+            print(f"{BLUE}Checking for Shizuku exported files in phone storage (/sdcard/Shizuku/)...{NC}")
+            shizuku_src = "/sdcard/Shizuku/rish"
+            if not os.path.exists(shizuku_src):
+                shizuku_src = os.path.expanduser("~/storage/shared/Shizuku/rish")
+                
+            if os.path.exists(shizuku_src):
+                try:
+                    termux_bin = "/data/data/com.termux/files/usr/bin"
+                    if os.path.exists(termux_bin):
+                        import glob
+                        src_dir = os.path.dirname(shizuku_src)
+                        for fpath in glob.glob(os.path.join(src_dir, "rish*")):
+                            dest_file = os.path.join(termux_bin, os.path.basename(fpath))
+                            shutil.copy(fpath, dest_file)
+                            
+                        os.chmod(os.path.join(termux_bin, "rish"), 0o755)
+                        dex_file = os.path.join(termux_bin, "rish_shizuku.dex")
+                        if os.path.exists(dex_file):
+                            os.chmod(dex_file, 0o444)
+                            
+                        print(f"{GREEN}[✓] Shizuku 'rish' successfully auto-installed to your Termux bin path!{NC}")
+                        print(f"{BLUE}Note: When you run the server and send the first command, tap 'Always Allow' on the Shizuku popup.{NC}")
+                        shizuku_enabled = True
+                except Exception as e:
+                    print(f"{RED}Failed to auto-install Shizuku rish files: {e}{NC}")
+            else:
+                print(f"{RED}[!] Could not find exported Shizuku files at '/sdcard/Shizuku/rish'.{NC}")
+                print(f"{YELLOW}To set up Shizuku phone control, please:{NC}")
+                print(f"  1. Open the Shizuku App on your phone.")
+                print(f"  2. Tap 'Use Shizuku in terminal apps' -> 'Export files'.")
+                print(f"  3. Create a folder named 'Shizuku' in your phone's main internal storage and save the files there.")
+                print(f"  4. Grant Termux storage access by running 'termux-setup-storage' in Termux.")
+                print(f"  5. Run this setup wizard again or let the server auto-detect it later.")
+                get_input("Press Enter to continue with setup", "")
+
+    # 6. Build and save the config object
     config = {
         "provider": provider_id,
         "provider_name": provider_name,
@@ -166,7 +214,8 @@ def main():
         "base_url": base_url,
         "model": selected_model,
         "telegram_enabled": telegram_enabled,
-        "telegram_token": telegram_token
+        "telegram_token": telegram_token,
+        "shizuku_enabled": shizuku_enabled
     }
 
     try:
@@ -175,19 +224,20 @@ def main():
         print_header()
         print(f"{GREEN}Success! Configuration saved to config.json.{NC}\n")
         print(f"{CYAN}Configuration Summary:{NC}")
-        print(f"  AI Provider:  {provider_name}")
-        print(f"  Model:        {selected_model}")
+        print(f"  AI Provider:     {provider_name}")
+        print(f"  Model:           {selected_model}")
         if api_key:
-            print(f"  API Key:      {'*' * 8}{api_key[-4:] if len(api_key) > 4 else ''}")
+            print(f"  API Key:         {'*' * 8}{api_key[-4:] if len(api_key) > 4 else ''}")
         else:
-            print(f"  API Key:      None (or Local)")
+            print(f"  API Key:         None (or Local)")
         if base_url:
-            print(f"  Base URL:     {base_url}")
-        print(f"  Telegram Bot: {'Enabled' if telegram_enabled else 'Disabled'}")
+            print(f"  Base URL:        {base_url}")
+        print(f"  Telegram Bot:    {'Enabled' if telegram_enabled else 'Disabled'}")
         if telegram_enabled:
-            print(f"  TG Token:     {'*' * 8}{telegram_token[-4:] if len(telegram_token) > 4 else ''}")
+            print(f"  TG Token:        {'*' * 8}{telegram_token[-4:] if len(telegram_token) > 4 else ''}")
+        print(f"  Shizuku Control: {'Enabled/Configured' if shizuku_enabled else 'Disabled/Not Configured'}")
         print(f"\n{GREEN}PocketstrikeAI is ready to be launched!{NC}")
-        print(f"Run {YELLOW}./launch.sh${NC} and choose option 2 to launch.")
+        print(f"Run {YELLOW}./launch.sh{NC} and choose option 2 to launch.")
         print(f"{CYAN}=================================================={NC}")
     except Exception as e:
         print(f"\n{RED}Error saving configuration: {e}{NC}")
