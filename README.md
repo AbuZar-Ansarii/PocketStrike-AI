@@ -67,7 +67,7 @@ Choose option `2` from the launcher. Open the **Local URL** in your phone's brow
 ---
 
 ## 🔧 ReAct Function Calling Tools
-PocketStrike AI has access to 17 local tools to audit, crawl, and inspect systems:
+PocketStrike AI has access to 28 local tools to audit, crawl, and control systems:
 
 | # | Tool Name | Description |
 |---|---|---|
@@ -88,6 +88,17 @@ PocketStrike AI has access to 17 local tools to audit, crawl, and inspect system
 | 15 | `run_python_script(name, args)`| Runs a Python script written by the AI inside the workspace sandbox. |
 | 16 | `send_android_notification()`| Sends a system lockscreen notification banner using Termux:API. |
 | 17 | `vibrate_device(ms)` | Vibrates the phone for a specified duration. |
+| 18 | `take_camera_photo(cam_id)` | Snaps a photo using front ("1") or back ("0") camera and saves to workspace. |
+| 19 | `get_phone_location()` | Retrieves GPS coordinates of the device (latitude, longitude, altitude). |
+| 20 | `make_phone_call(number)` | Places an outgoing call to the specified number using Termux:API. |
+| 21 | `send_sms(number, msg)` | Sends an SMS text message using Termux:API. |
+| 22 | `set_brightness(level)` | Adjusts screen brightness level (0 to 255) using Termux:API. |
+| 23 | `set_volume(stream, level)` | Adjusts volume streams (music, ring, alarm, notification, system). |
+| 24 | `take_screenshot()` | Captures the phone's active screen (requires local ADB). |
+| 25 | `tap_screen(x, y)` | Simulates a screen touch event at coordinates (x, y) using local ADB. |
+| 26 | `swipe_screen(x1, y1, x2, y2, ms)`| Simulates a screen swipe gesture from (x1, y1) to (x2, y2) using local ADB. |
+| 27 | `press_key(key_code)` | Simulates a physical key event (Home, Back, Power, volume keys) using ADB. |
+| 28 | `launch_app(pkg_name)` | Opens any application on the device by its package bundle name using ADB. |
 
 ---
 
