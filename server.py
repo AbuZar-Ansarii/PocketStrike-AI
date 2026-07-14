@@ -126,6 +126,7 @@ Available Tools:
    Runs a Python script written by you inside your workspace directory and returns its output. Use this to run custom scripts, write new tools, or build calculations.
 7. execute_termux_command(command)
    Runs a shell command inside Termux (e.g. 'whoami', 'uname -a', 'ping', 'curl', 'nmap', etc.) and returns the standard output.
+   Note: This operates inside a persistent stateful background shell session. Directory changes ('cd') and environment variables carry over to subsequent commands.
 8. web_search(query)
    Scrapes DuckDuckGo HTML for live search results. Use this to lookup CVEs or current information.
 9. fetch_url(url)
@@ -142,6 +143,10 @@ Available Tools:
     Searches for files recursively inside your workspace using glob patterns (e.g. "*.py").
 15. local_network_scan()
     Scans the local subnet for active connected devices (fast ARP and ICMP ping sweep). Use this when the user asks to scan the network.
+16. audit_android_security()
+    Audits the Android device's firmware release version, developer options (USB debugging), root signature binary trails, and outdated packages.
+17. subnet_port_sweep(port_number)
+    Performs a high-speed parallel sweep checking which hosts on the local network subnet have a specific port open (e.g., check for SSH port 22 or HTTP port 80).
 
 Instructions:
 - When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
@@ -501,32 +506,312 @@ def run_python_script(script_name, args=None):
     except Exception as e:
         return f"Error running script: {str(e)}"
 
-def execute_termux_command(command):
-    # Safety filter: prevent dangerous command injections that could wipe the home directory
-    forbidden_tokens = ["rm -rf", "rm -f /", "mkfs", "dd if="]
-    for token in forbidden_tokens:
-        if token in command:
-            return f"Error: Command execution blocked. Command contains forbidden token: '{token}'"
+    except Exception as e:
+        return f"Error running script: {str(e)}"
+
+# =======================================================
+# STATEFUL BACKGROUND SHELL SESSION CONTROLLER
+# =======================================================
+class StatefulShell:
+    def __init__(self):
+        self.process = None
+        self.stdout_queue = None
+        self.stderr_queue = None
+        self.current_directory = WORKSPACE_DIR
+        self.init_shell()
+
+    def init_shell(self):
+        try:
+            import subprocess
+            import queue
+            import threading
             
+            # Start background shell process
+            shell_executable = "bash" if shutil.which("bash") else "sh"
+            self.process = subprocess.Popen(
+                [shell_executable],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+                cwd=self.current_directory
+            )
+            
+            self.stdout_queue = queue.Queue()
+            self.stderr_queue = queue.Queue()
+            
+            # Start background non-blocking output reader threads
+            def read_output(stream, q):
+                for line in iter(stream.readline, ''):
+                    q.put(line)
+                stream.close()
+                
+            self.stdout_thread = threading.Thread(target=read_output, args=(self.process.stdout, self.stdout_queue))
+            self.stderr_thread = threading.Thread(target=read_output, args=(self.process.stderr, self.stderr_queue))
+            
+            self.stdout_thread.daemon = True
+            self.stderr_thread.daemon = True
+            
+            self.stdout_thread.start()
+            self.stderr_thread.start()
+        except Exception as e:
+            print(f"Failed to initialize stateful shell: {str(e)}")
+
+    def execute(self, cmd_str, timeout=30):
+        # Safety token validation
+        forbidden_tokens = ["rm -rf", "rm -f /", "mkfs", "dd if="]
+        for token in forbidden_tokens:
+            if token in cmd_str:
+                return f"Error: Command execution blocked. Forbidden token: '{token}'"
+                
+        if not self.process or self.process.poll() is not None:
+            # Restart shell if it crashed or terminated
+            self.init_shell()
+            
+        import time
+        import queue
+        
+        # Clear out any residual queue data
+        while not self.stdout_queue.empty():
+            try: self.stdout_queue.get_nowait()
+            except queue.Empty: break
+        while not self.stderr_queue.empty():
+            try: self.stderr_queue.get_nowait()
+            except queue.Empty: break
+            
+        # Append sentinel marker to detect command completion
+        sentinel = f"__PKST_CMD_DONE_{int(time.time())}__"
+        full_command = f"{cmd_str}\npwd\necho '{sentinel}'\necho '{sentinel}' >&2\n"
+        
+        try:
+            self.process.stdin.write(full_command)
+            self.process.stdin.flush()
+        except Exception as e:
+            self.init_shell()
+            return f"Error: Failed to write to shell input. Shell restarted. Details: {str(e)}"
+            
+        stdout_buf = []
+        stderr_buf = []
+        start_time = time.time()
+        
+        # Poll stdout and stderr until sentinel marker is encountered or timeout expires
+        while time.time() - start_time < timeout:
+            # Read stdout
+            while True:
+                try:
+                    line = self.stdout_queue.get_nowait()
+                    if sentinel in line:
+                        break
+                    stdout_buf.append(line)
+                except queue.Empty:
+                    break
+                    
+            # Read stderr
+            while True:
+                try:
+                    line = self.stderr_queue.get_nowait()
+                    if sentinel in line:
+                        break
+                    stderr_buf.append(line)
+                except queue.Empty:
+                    break
+                    
+            # Break if sentinel marks command completion
+            if (stdout_buf and sentinel in stdout_buf[-1]) or (any(sentinel in l for l in stdout_buf)):
+                break
+                
+            time.sleep(0.05)
+            
+        # Strip sentinel from logs
+        stdout_clean = [l for l in stdout_buf if sentinel not in l]
+        stderr_clean = [l for l in stderr_buf if sentinel not in l]
+        
+        # Update working directory tracking
+        if stdout_clean:
+            # The last clean line printed is our 'pwd' output from the sentinel call
+            potential_pwd = stdout_clean[-1].strip()
+            if os.path.exists(potential_pwd):
+                self.current_directory = potential_pwd
+                stdout_clean = stdout_clean[:-1] # Remove pwd line from user stdout logs
+                
+        output = ""
+        if stdout_clean:
+            output += "".join(stdout_clean)
+        if stderr_clean:
+            output += "Stderr:\n" + "".join(stderr_clean)
+            
+        if not output.strip():
+            # If timed out
+            if time.time() - start_time >= timeout:
+                return "Command execution completed (or timed out after 30 seconds)."
+            return "Command executed successfully (no output)."
+            
+        return output
+
+# Initialize single global stateful shell instance
+GLOBAL_SHELL = StatefulShell()
+
+def execute_termux_command(command):
+    # Route command execution dynamically to our persistent stateful shell
+    return GLOBAL_SHELL.execute(command)
+
+def audit_android_security():
+    audit = {}
     try:
         import subprocess
-        # Automatically append -c 4 to ping commands if count isn't specified to prevent hanging
-        if command.strip().startswith("ping ") and "-c" not in command:
-            parts = command.strip().split()
-            parts.insert(1, "-c 4")
-            command = " ".join(parts)
-            
-        res = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=60)
-        output = f"Exit Code: {res.returncode}\n"
-        if res.stdout:
-            output += f"Stdout:\n{res.stdout}\n"
-        if res.stderr:
-            output += f"Stderr:\n{res.stderr}\n"
-        return output
-    except subprocess.TimeoutExpired:
-        return "Error: Command execution timed out (limit: 60 seconds)."
+        # 1. Check Android OS parameters via getprop interface
+        release_res = subprocess.run(["getprop", "ro.build.version.release"], capture_output=True, text=True, timeout=3)
+        patch_res = subprocess.run(["getprop", "ro.build.version.security_patch"], capture_output=True, text=True, timeout=3)
+        sdk_res = subprocess.run(["getprop", "ro.build.version.sdk"], capture_output=True, text=True, timeout=3)
+        brand_res = subprocess.run(["getprop", "ro.product.brand"], capture_output=True, text=True, timeout=3)
+        model_res = subprocess.run(["getprop", "ro.product.model"], capture_output=True, text=True, timeout=3)
+        
+        audit["android_version"] = release_res.stdout.strip() if release_res.returncode == 0 else "Unknown"
+        audit["security_patch"] = patch_res.stdout.strip() if patch_res.returncode == 0 else "Unknown"
+        audit["sdk_api_level"] = sdk_res.stdout.strip() if sdk_res.returncode == 0 else "Unknown"
+        audit["device_brand"] = brand_res.stdout.strip() if brand_res.returncode == 0 else "Unknown"
+        audit["device_model"] = model_res.stdout.strip() if model_res.returncode == 0 else "Unknown"
     except Exception as e:
-        return f"Error executing command: {str(e)}"
+        audit["properties_error"] = str(e)
+        
+    # 2. Check for SuperUser/Root trail binary signatures
+    root_signatures = ["/system/bin/su", "/system/xbin/su", "/sbin/su", "/system/sd/xbin/su", "/system/bin/failsafe/su", "/data/local/xbin/su", "/data/local/bin/su"]
+    su_found = False
+    for path in root_signatures:
+        if os.path.exists(path):
+            su_found = True
+            break
+            
+    if not su_found:
+        # Check command path trail
+        su_found = shutil.which("su") is not None
+        
+    audit["superuser_root_access"] = "Active/Rooted" if su_found else "Not Rooted / Standard User"
+    
+    # 3. Audit Termux installations security dependencies (outdated pkg check)
+    try:
+        import subprocess
+        # Check if packages can be updated or list them
+        upgradable_res = subprocess.run(["pkg", "list-upgradable"], capture_output=True, text=True, timeout=10)
+        if upgradable_res.returncode == 0:
+            lines = [l.strip() for l in upgradable_res.stdout.split("\n") if l.strip()]
+            audit["upgradable_packages_count"] = len(lines)
+            audit["upgradable_packages_list"] = lines[:15] # Return top 15 upgradable packages
+        else:
+            audit["upgradable_packages_count"] = "Unknown"
+    except Exception:
+        pass
+        
+    # 4. Check USB Debugging Developer Options state
+    try:
+        adb_res = subprocess.run(["getprop", "init.svc.adbd"], capture_output=True, text=True, timeout=3)
+        audit["adb_debugging_status"] = "Active/Enabled" if "running" in adb_res.stdout else "Disabled"
+    except Exception:
+        pass
+        
+    # 5. Extract security evaluation recommendation
+    evaluation = []
+    if su_found:
+        evaluation.append("WARNING: SuperUser root access detected. Ensure you have custom firewalls or verified root binaries installed to prevent malicious permission escalations.")
+    if audit.get("security_patch") != "Unknown":
+        # Check patch age
+        try:
+            from datetime import datetime
+            patch_date = datetime.strptime(audit["security_patch"], "%Y-%m-%d")
+            diff = (datetime.now() - patch_date).days
+            if diff > 180: # Outdated by more than 6 months
+                evaluation.append(f"WARNING: Android security patch is {diff} days outdated (Last updated: {audit['security_patch']}). The device is susceptible to older CVE exploits.")
+        except Exception:
+            pass
+            
+    if audit.get("upgradable_packages_count") != "Unknown" and isinstance(audit.get("upgradable_packages_count"), int) and audit["upgradable_packages_count"] > 10:
+        evaluation.append(f"TIP: Termux has {audit['upgradable_packages_count']} packages outdated. Run 'pkg upgrade' to patch local software dependencies.")
+        
+    if not evaluation:
+        evaluation.append("Device security configuration is optimal. No critical vulnerabilities found in default interface checklist.")
+        
+    audit["audit_recommendations"] = evaluation
+    return json.dumps(audit, indent=2)
+
+def subnet_port_sweep(port_number):
+    try:
+        import subprocess
+        import concurrent.futures
+        
+        # 1. Resolve subnet range
+        res = subprocess.run(["ip", "route"], capture_output=True, text=True, timeout=5)
+        routes = res.stdout if res.returncode == 0 else ""
+        
+        subnet = None
+        for line in routes.split("\n"):
+            if "proto kernel" in line and "scope link" in line and "/" in line:
+                parts = line.strip().split()
+                for p in parts:
+                    if "/" in p and p[0].isdigit():
+                        subnet = p
+                        break
+            if subnet:
+                break
+                
+        if not subnet:
+            addr_res = subprocess.run(["ip", "addr"], capture_output=True, text=True, timeout=5)
+            addr_out = addr_res.stdout if addr_res.returncode == 0 else ""
+            match = re.search(r'inet\s+(\d+\.\d+\.\d+\.\d+)/(\d+)\s+[^>]*wlan0', addr_out)
+            if match:
+                ip = match.group(1)
+                mask = match.group(2)
+                ip_parts = ip.split(".")
+                subnet = f"{ip_parts[0]}.{ip_parts[1]}.{ip_parts[2]}.0/{mask}"
+                
+        if not subnet:
+            subnet = "192.168.1.0/24"
+            
+        base_ip = ".".join(subnet.split("/")[0].split(".")[:-1])
+        
+        target_port = int(port_number)
+        active_listeners = []
+        
+        # 2. Parallel thread sweep to scan the target port across all subnet hosts (1-254)
+        def scan_host_port(ip):
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(0.8) # Keep it extremely fast
+                result = s.connect_ex((ip, target_port))
+                s.close()
+                if result == 0:
+                    try:
+                        name_info = socket.gethostbyaddr(ip)
+                        hostname = name_info[0]
+                    except Exception:
+                        hostname = "Unknown Host"
+                    return {
+                        "ip": ip,
+                        "hostname": hostname
+                    }
+            except Exception:
+                pass
+            return None
+            
+        ips_to_scan = [f"{base_ip}.{i}" for i in range(1, 255)]
+        
+        # Sweep with 80 parallel threads
+        with concurrent.futures.ThreadPoolExecutor(max_workers=80) as executor:
+            scanned_results = executor.map(scan_host_port, ips_to_scan)
+            
+        for r in scanned_results:
+            if r:
+                active_listeners.append(r)
+                
+        sweep_details = {
+            "scanned_subnet": subnet,
+            "target_port": target_port,
+            "hosts_found_listening": len(active_listeners),
+            "devices": active_listeners
+        }
+        return json.dumps(sweep_details, indent=2)
+    except Exception as e:
+        return f"Error performing subnet port sweep: {str(e)}"
 
 def web_search(query):
     try:
@@ -839,6 +1124,13 @@ def execute_local_tool(name, args_str):
             return search_files(pattern)
         elif name == "local_network_scan":
             return local_network_scan()
+        elif name == "audit_android_security":
+            return audit_android_security()
+        elif name == "subnet_port_sweep":
+            port_number = kwargs.get("port_number")
+            if port_number is None:
+                return "Error: Missing required argument 'port_number'."
+            return subnet_port_sweep(port_number)
         else:
             return f"Error: Tool '{name}' is not recognized."
     except Exception as e:
