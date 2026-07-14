@@ -375,7 +375,13 @@ def execute_termux_command(command):
 
 def web_search(query):
     try:
-        url = f"https://html.duckduckgo.com/html/?q={requests.utils.quote(query)}"
+        import urllib.parse
+        import html as html_parser
+        
+        # Safe URL encoding using urllib.parse.quote
+        encoded_query = urllib.parse.quote(query)
+        url = f"https://html.duckduckgo.com/html/?q={encoded_query}"
+        
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
@@ -383,19 +389,30 @@ def web_search(query):
         if res.status_code != 200:
             return f"Error: Search failed (Status {res.status_code})."
             
-        html = res.text
+        html_content = res.text
         results = []
-        titles = re.findall(r'<a class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', html, re.DOTALL)
-        snippets = re.findall(r'<a class="result__snippet"[^>]*>(.*?)</a>', html, re.DOTALL)
+        
+        # Robust regex targeting result titles and snippets regardless of attribute orders
+        titles = re.findall(r'<a\s+[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', html_content, re.DOTALL)
+        snippets = re.findall(r'<a\s+[^>]*class="result__snippet"[^>]*>(.*?)</a>', html_content, re.DOTALL)
         
         for i in range(min(len(titles), len(snippets), 5)):
-            url_match, title = titles[i]
-            title_clean = re.sub(r'<[^>]*>', '', title).strip()
-            snippet_clean = re.sub(r'<[^>]*>', '', snippets[i]).strip()
-            results.append(f"[{i+1}] {title_clean}\nLink: {url_match}\nSummary: {snippet_clean}")
+            raw_href, title = titles[i]
+            
+            # Extract clean redirect target URL if present in DuckDuckGo redirect link
+            parsed_url = urllib.parse.urlparse(raw_href)
+            queries = urllib.parse.parse_qs(parsed_url.query)
+            clean_href = queries.get("uddg", [raw_href])[0]
+            if clean_href.startswith("//"):
+                clean_href = "https:" + clean_href
+                
+            title_clean = html_parser.unescape(re.sub(r'<[^>]*>', '', title).strip())
+            snippet_clean = html_parser.unescape(re.sub(r'<[^>]*>', '', snippets[i]).strip())
+            
+            results.append(f"[{i+1}] {title_clean}\nLink: {clean_href}\nSummary: {snippet_clean}")
             
         if not results:
-            return "No search results found or search was blocked."
+            return "No search results found or search was blocked by rate-limiting."
             
         return "\n---\n".join(results)
     except Exception as e:
@@ -403,6 +420,10 @@ def web_search(query):
 
 def fetch_url(url):
     try:
+        import html as html_parser
+        if not url.startswith("http://") and not url.startswith("https://"):
+            url = "https://" + url
+            
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
@@ -410,9 +431,14 @@ def fetch_url(url):
         if res.status_code != 200:
             return f"Error: Page fetch failed (Status {res.status_code})."
             
-        html = res.text
-        html_clean = re.sub(r'<(script|style).*?>([\s\S]*?)</\1>', '', html, flags=re.IGNORECASE)
+        html_content = res.text
+        # Remove script and style tags completely
+        html_clean = re.sub(r'<(script|style).*?>([\s\S]*?)</\1>', '', html_content, flags=re.IGNORECASE)
+        # Strip all HTML tags
         text = re.sub(r'<[^>]*>', '', html_clean)
+        # Convert HTML entities to clean characters
+        text = html_parser.unescape(text)
+        # Normalize whitespace and empty lines
         text = re.sub(r'\n\s*\n', '\n\n', text)
         text = re.sub(r'[ \t]+', ' ', text)
         
