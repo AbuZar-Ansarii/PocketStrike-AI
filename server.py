@@ -924,7 +924,33 @@ def run_adb_command(cmd_str):
         import shutil
         
         # Check if rish (Shizuku's Termux shell interface) is installed and available
-        use_shizuku = shutil.which("rish") is not None
+        rish_path = shutil.which("rish")
+        
+        # Auto-install Shizuku client files if found in the user's exported /sdcard/Shizuku/ directory
+        if rish_path is None:
+            shizuku_src = "/sdcard/Shizuku/rish"
+            if not os.path.exists(shizuku_src):
+                shizuku_src = os.path.expanduser("~/storage/shared/Shizuku/rish")
+                
+            if os.path.exists(shizuku_src):
+                try:
+                    termux_bin = "/data/data/com.termux/files/usr/bin"
+                    if os.path.exists(termux_bin):
+                        # Copy main executable
+                        shutil.copy(shizuku_src, os.path.join(termux_bin, "rish"))
+                        # Copy helper script if exists
+                        shizuku_src_sh = shizuku_src + "_sh"
+                        if os.path.exists(shizuku_src_sh):
+                            shutil.copy(shizuku_src_sh, os.path.join(termux_bin, "rish_sh"))
+                        # Grant execution permissions
+                        os.chmod(os.path.join(termux_bin, "rish"), 0o755)
+                        os.chmod(os.path.join(termux_bin, "rish_sh"), 0o755)
+                        rish_path = os.path.join(termux_bin, "rish")
+                        print("PocketstrikeAI: Auto-installed Shizuku rish binaries successfully!")
+                except Exception as e:
+                    print(f"PocketstrikeAI: Shizuku auto-install failed: {e}")
+                    
+        use_shizuku = rish_path is not None
         
         if use_shizuku:
             # Route ADB shell commands directly through Shizuku Binder API
