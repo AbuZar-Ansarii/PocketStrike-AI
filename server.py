@@ -932,13 +932,30 @@ def run_adb_command(cmd_str):
         
         # Auto-install Shizuku client files if found in the user's exported /sdcard/Shizuku/ directory
         if rish_path is None:
-            shizuku_src = "/sdcard/Shizuku/rish"
-            if not os.path.exists(shizuku_src):
-                shizuku_src = os.path.expanduser("~/storage/shared/Shizuku/rish")
+            possible_srcs = [
+                "/sdcard/Shizuku/rish",
+                "/storage/emulated/0/Shizuku/rish",
+                os.path.expanduser("~/storage/shared/Shizuku/rish"),
+                os.path.expanduser("~/storage/downloads/rish"),
+                os.path.expanduser("~/storage/downloads/Shizuku/rish"),
+                "/sdcard/Download/rish",
+                "/sdcard/Download/Shizuku/rish",
+                "/storage/emulated/0/Download/rish",
+                "/storage/emulated/0/Download/Shizuku/rish",
+                os.path.abspath(os.path.join(os.path.dirname(__file__), "rish")),
+                os.path.abspath(os.path.join(os.path.dirname(__file__), "workspace", "rish"))
+            ]
+            
+            shizuku_src = None
+            for path in possible_srcs:
+                if os.path.exists(path):
+                    shizuku_src = path
+                    break
                 
-            if os.path.exists(shizuku_src):
+            if shizuku_src:
                 try:
-                    termux_bin = "/data/data/com.termux/files/usr/bin"
+                    prefix = os.environ.get("PREFIX", "/data/data/com.termux/files/usr")
+                    termux_bin = os.path.join(prefix, "bin")
                     if os.path.exists(termux_bin):
                         # Copy all files matching rish* (including dex loader)
                         src_dir = os.path.dirname(shizuku_src)
@@ -955,7 +972,7 @@ def run_adb_command(cmd_str):
                             os.chmod(dex_file, 0o444)
                             
                         rish_path = os.path.join(termux_bin, "rish")
-                        print("PocketstrikeAI: Auto-installed Shizuku rish binaries successfully!")
+                        print(f"PocketstrikeAI: Auto-installed Shizuku rish binaries successfully to {termux_bin}!")
                 except Exception as e:
                     print(f"PocketstrikeAI: Shizuku auto-install failed: {e}")
                     

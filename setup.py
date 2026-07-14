@@ -171,14 +171,31 @@ def main():
             print(f"{GREEN}[✓] Shizuku 'rish' client is already installed in your Termux PATH.{NC}")
             shizuku_enabled = True
         else:
-            print(f"{BLUE}Checking for Shizuku exported files in phone storage (/sdcard/Shizuku/)...{NC}")
-            shizuku_src = "/sdcard/Shizuku/rish"
-            if not os.path.exists(shizuku_src):
-                shizuku_src = os.path.expanduser("~/storage/shared/Shizuku/rish")
+            print(f"{BLUE}Checking for Shizuku exported files in phone storage and downloads...{NC}")
+            possible_srcs = [
+                "/sdcard/Shizuku/rish",
+                "/storage/emulated/0/Shizuku/rish",
+                os.path.expanduser("~/storage/shared/Shizuku/rish"),
+                os.path.expanduser("~/storage/downloads/rish"),
+                os.path.expanduser("~/storage/downloads/Shizuku/rish"),
+                "/sdcard/Download/rish",
+                "/sdcard/Download/Shizuku/rish",
+                "/storage/emulated/0/Download/rish",
+                "/storage/emulated/0/Download/Shizuku/rish",
+                os.path.abspath(os.path.join(os.path.dirname(__file__), "rish")),
+                os.path.abspath(os.path.join(os.path.dirname(__file__), "workspace", "rish"))
+            ]
+            
+            shizuku_src = None
+            for path in possible_srcs:
+                if os.path.exists(path):
+                    shizuku_src = path
+                    break
                 
-            if os.path.exists(shizuku_src):
+            if shizuku_src:
                 try:
-                    termux_bin = "/data/data/com.termux/files/usr/bin"
+                    prefix = os.environ.get("PREFIX", "/data/data/com.termux/files/usr")
+                    termux_bin = os.path.join(prefix, "bin")
                     if os.path.exists(termux_bin):
                         import glob
                         src_dir = os.path.dirname(shizuku_src)
@@ -191,17 +208,17 @@ def main():
                         if os.path.exists(dex_file):
                             os.chmod(dex_file, 0o444)
                             
-                        print(f"{GREEN}[✓] Shizuku 'rish' successfully auto-installed to your Termux bin path!{NC}")
+                        print(f"{GREEN}[✓] Shizuku 'rish' successfully auto-installed to your Termux bin path: {termux_bin}!{NC}")
                         print(f"{BLUE}Note: When you run the server and send the first command, tap 'Always Allow' on the Shizuku popup.{NC}")
                         shizuku_enabled = True
                 except Exception as e:
                     print(f"{RED}Failed to auto-install Shizuku rish files: {e}{NC}")
             else:
-                print(f"{RED}[!] Could not find exported Shizuku files at '/sdcard/Shizuku/rish'.{NC}")
+                print(f"{RED}[!] Could not find exported Shizuku files in downloads or storage.{NC}")
                 print(f"{YELLOW}To set up Shizuku phone control, please:{NC}")
                 print(f"  1. Open the Shizuku App on your phone.")
                 print(f"  2. Tap 'Use Shizuku in terminal apps' -> 'Export files'.")
-                print(f"  3. Create a folder named 'Shizuku' in your phone's main internal storage and save the files there.")
+                print(f"  3. Save the files to your phone's main storage, Downloads folder, or directly into the project directory ({os.path.dirname(__file__)}).")
                 print(f"  4. Grant Termux storage access by running 'termux-setup-storage' in Termux.")
                 print(f"  5. Run this setup wizard again or let the server auto-detect it later.")
                 get_input("Press Enter to continue with setup", "")
