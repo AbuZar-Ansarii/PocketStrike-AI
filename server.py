@@ -9,7 +9,7 @@ import requests
 import re
 import ast
 import shutil
-from flask import Flask, request, jsonify, render_template, send_from_directory
+from flask import Flask, request, jsonify, render_template, send_from_directory, Response
 
 # Setup Flask App
 # We serve templates from 'templates' and static files from 'static'
@@ -326,6 +326,196 @@ def get_ai_response_with_tools(messages):
     messages.append({"role": "assistant", "content": fallback})
     return fallback, messages
 
+# Streaming AI calls for ReAct and responses
+def call_ai_api_stream(messages):
+    provider = config.get("provider")
+    model = config.get("model")
+    api_key = config.get("api_key", "")
+    base_url = config.get("base_url", "")
+
+    if not provider:
+        yield "Error: AI Provider is not configured."
+        return
+
+    try:
+        # 1. Google Gemini API Stream
+        if provider == "gemini":
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?key={api_key}"
+            gemini_messages = []
+            for msg in messages:
+                role = "model" if msg["role"] == "assistant" else "user"
+                gemini_messages.append({
+                    "role": role,
+                    "parts": [{"text": msg["content"]}]
+                })
+            payload = {"contents": gemini_messages}
+            res = requests.post(url, json=payload, stream=True, timeout=60)
+            
+            for line in res.iter_lines():
+                if line:
+                    line_str = line.decode('utf-8').strip()
+                    if line_str.startswith("["):
+                        line_str = line_str[1:]
+                    if line_str.endswith("]"):
+                        line_str = line_str[:-1]
+                    if line_str.startswith(","):
+                        line_str = line_str[1:]
+                    try:
+                        data = json.loads(line_str)
+                        text = data["candidates"][0]["content"]["parts"][0]["text"]
+                        yield text
+                    except Exception:
+                        pass
+
+        # 2. Anthropic API Stream
+        elif provider == "anthropic":
+            url = f"{base_url}/messages"
+            headers = {
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json"
+            }
+            system_prompt = ""
+            filtered_messages = []
+            for m in messages:
+                if m["role"] == "system":
+                    system_prompt = m["content"]
+                else:
+                    role = "assistant" if m["role"] == "assistant" else "user"
+                    filtered_messages.append({"role": role, "content": m["content"]})
+            
+            payload = {
+                "model": model,
+                "messages": filtered_messages,
+                "max_tokens": 4096,
+                "stream": True
+            }
+            if system_prompt:
+                payload["system"] = system_prompt
+                
+            res = requests.post(url, json=payload, headers=headers, stream=True, timeout=60)
+            for line in res.iter_lines():
+                if line:
+                    line_str = line.decode('utf-8').strip()
+                    if line_str.startswith("data: "):
+                        data_json = line_str[6:]
+                        try:
+                            data = json.loads(data_json)
+                            if data.get("type") == "content_block_delta":
+                                yield data["delta"].get("text", "")
+                        except Exception:
+                            pass
+
+        # 3. OpenAI and compatible APIs Stream
+        else:
+            if provider == "ollama":
+                url = f"{base_url}/v1/chat/completions"
+            else:
+                url = f"{base_url}/chat/completions"
+                
+            headers = {"Content-Type": "application/json"}
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+            
+            payload = {
+                "model": model,
+                "messages": messages,
+                "stream": True
+            }
+
+            res = requests.post(url, json=payload, headers=headers, stream=True, timeout=60)
+            for line in res.iter_lines():
+                if line:
+                    line_str = line.decode('utf-8').strip()
+                    if line_str.startswith("data: "):
+                        data_json = line_str[6:]
+                        if data_json == "[DONE]":
+                            break
+                        try:
+                            data = json.loads(data_json)
+                            content = data["choices"][0]["delta"].get("content", "")
+                            if content:
+                                yield content
+                        except Exception:
+                            pass
+
+    except Exception as e:
+        yield f"Stream Request Error: {str(e)}"
+
+def get_ai_response_stream(messages):
+    system_present = False
+    for msg in messages:
+        if msg["role"] == "system":
+            system_present = True
+            break
+            
+    if not system_present:
+        messages.insert(0, {
+            "role": "system",
+            "content": get_system_prompt()
+        })
+        
+    loop_count = 0
+    max_loops = 5
+    
+    while loop_count < max_loops:
+        stream = call_ai_api_stream(messages)
+        
+        buffer = ""
+        is_tool_call = None
+        accumulated_response = ""
+        
+        for chunk in stream:
+            accumulated_response += chunk
+            buffer += chunk
+            
+            if is_tool_call is None:
+                if len(buffer) >= 11:
+                    if buffer.startswith("[TOOL_CALL:"):
+                        is_tool_call = True
+                    else:
+                        is_tool_call = False
+                        yield buffer
+                        buffer = ""
+            else:
+                if not is_tool_call:
+                    yield chunk
+                    
+        if is_tool_call is False or is_tool_call is None:
+            messages.append({"role": "assistant", "content": accumulated_response})
+            yield f"\n[HISTORY_SYNC]:{json.dumps(messages)}"
+            return
+            
+        match = re.search(r'\[TOOL_CALL:\s*(\w+)\((.*)\)\s*\]', accumulated_response)
+        if not match:
+            messages.append({"role": "assistant", "content": accumulated_response})
+            yield accumulated_response
+            yield f"\n[HISTORY_SYNC]:{json.dumps(messages)}"
+            return
+            
+        tool_name = match.group(1)
+        tool_args_str = match.group(2)
+        
+        yield accumulated_response
+        
+        tool_result = execute_local_tool(tool_name, tool_args_str)
+        
+        tool_result_msg = f"\n[TOOL_RESULT: {tool_name} output]\n{tool_result}"
+        yield tool_result_msg
+        
+        messages.append({"role": "assistant", "content": accumulated_response})
+        messages.append({
+            "role": "user",
+            "content": f"[TOOL_RESULT: {tool_name} output]\n{tool_result}"
+        })
+        
+        loop_count += 1
+        
+    fallback = "Error: Tool execution loop limit reached."
+    yield fallback
+    messages.append({"role": "assistant", "content": fallback})
+    yield f"\n[HISTORY_SYNC]:{json.dumps(messages)}"
+
 # Call selected AI provider
 def call_ai_api(messages):
     provider = config.get("provider")
@@ -527,11 +717,11 @@ def chat():
     if not messages:
         return jsonify({"error": "No messages provided"}), 400
         
-    response_text, updated_messages = get_ai_response_with_tools(messages)
-    return jsonify({
-        "response": response_text,
-        "updated_messages": updated_messages
-    })
+    def generate():
+        for chunk in get_ai_response_stream(messages):
+            yield chunk
+
+    return Response(generate(), mimetype='text/event-stream')
 
 @app.route('/api/status', methods=['GET'])
 def get_status():

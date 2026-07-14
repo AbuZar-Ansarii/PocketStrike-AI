@@ -274,11 +274,49 @@ async function handleSend() {
         removeTypingIndicator();
 
         if (response.ok) {
-            const data = await response.json();
-            if (data.updated_messages) {
-                activeChat.messages = data.updated_messages;
-            } else {
-                activeChat.messages.push({ role: 'assistant', content: data.response });
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+            let done = false;
+            let streamedText = "";
+            
+            // Add placeholder for assistant message
+            const assistantMessageIndex = activeChat.messages.length;
+            activeChat.messages.push({ role: 'assistant', content: "" });
+            renderAll();
+            
+            // Access the target bubble element directly for speed
+            const messageDivs = messagesContainer.querySelectorAll('.message.assistant');
+            const lastMessageDiv = messageDivs[messageDivs.length - 1];
+            const lastBubble = lastMessageDiv.querySelector('.message-bubble');
+            
+            while (!done) {
+                const { value, done: readerDone } = await reader.read();
+                done = readerDone;
+                if (value) {
+                    const chunk = decoder.decode(value, { stream: !done });
+                    streamedText += chunk;
+                    
+                    // Inspect for final history sync message
+                    const syncIndex = streamedText.indexOf('\n[HISTORY_SYNC]:');
+                    if (syncIndex !== -1) {
+                        const syncData = streamedText.substring(syncIndex + 16);
+                        streamedText = streamedText.substring(0, syncIndex);
+                        try {
+                            const updatedMessages = JSON.parse(syncData);
+                            activeChat.messages = updatedMessages;
+                        } catch (err) {
+                            console.error("Failed to parse history sync:", err);
+                        }
+                        break;
+                    }
+                    
+                    // Update active conversation text state
+                    activeChat.messages[assistantMessageIndex].content = streamedText;
+                    
+                    // Render markdown structure directly and scroll down
+                    lastBubble.innerHTML = parseMarkdown(streamedText);
+                    scrollToBottom();
+                }
             }
         } else {
             const errText = await response.text();
