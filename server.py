@@ -1436,17 +1436,20 @@ def execute_local_tool(name, args_str):
         return f"Error executing tool: {str(e)}"
 
 def get_ai_response_with_tools(messages):
-    # Ensure system prompt is present at index 0
-    system_present = False
-    for msg in messages:
+    # Ensure the system prompt containing all 28 ReAct tools and capabilities is always active
+    system_index = -1
+    for idx, msg in enumerate(messages):
         if msg["role"] == "system":
-            system_present = True
+            system_index = idx
             break
             
-    if not system_present:
+    full_prompt = get_system_prompt()
+    if system_index >= 0:
+        messages[system_index]["content"] = full_prompt
+    else:
         messages.insert(0, {
             "role": "system",
-            "content": get_system_prompt()
+            "content": full_prompt
         })
         
     loop_count = 0
@@ -1599,16 +1602,20 @@ def call_ai_api_stream(messages):
         yield f"Stream Request Error: {str(e)}"
 
 def get_ai_response_stream(messages):
-    system_present = False
-    for msg in messages:
+    # Ensure the system prompt containing all 28 ReAct tools and capabilities is always active
+    system_index = -1
+    for idx, msg in enumerate(messages):
         if msg["role"] == "system":
-            system_present = True
+            system_index = idx
             break
             
-    if not system_present:
+    full_prompt = get_system_prompt()
+    if system_index >= 0:
+        messages[system_index]["content"] = full_prompt
+    else:
         messages.insert(0, {
             "role": "system",
-            "content": get_system_prompt()
+            "content": full_prompt
         })
         
     loop_count = 0
