@@ -813,6 +813,169 @@ def subnet_port_sweep(port_number):
     except Exception as e:
         return f"Error performing subnet port sweep: {str(e)}"
 
+# =======================================================
+# PHONE HARDWARE & SYSTEM CONTROL TOOLS (TERMUX:API)
+# =======================================================
+def take_camera_photo(camera_id="0"):
+    try:
+        import subprocess
+        # camera_id: "0" = back, "1" = front
+        target_name = "captured_photo.jpg"
+        target_path = os.path.join(WORKSPACE_DIR, target_name)
+        
+        # Cleanup old photo
+        if os.path.exists(target_path):
+            os.remove(target_path)
+            
+        cmd = ["termux-camera-photo", "-c", str(camera_id), target_path]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=12)
+        if res.returncode == 0 and os.path.exists(target_path):
+            return f"Success: Photo captured. Saved to workspace as '{target_name}'. Path: {target_path}."
+        return f"Error taking photo: {res.stderr} (Ensure Termux:API app is installed and camera permission is granted)"
+    except Exception as e:
+        return f"Error executing camera photo tool: {str(e)}"
+
+def get_phone_location():
+    try:
+        import subprocess
+        res = subprocess.run(["termux-location"], capture_output=True, text=True, timeout=10)
+        if res.returncode == 0:
+            return res.stdout
+        return f"Error getting location: {res.stderr} (Ensure GPS location permissions are granted)"
+    except Exception as e:
+        return f"Error executing location tool: {str(e)}"
+
+def make_phone_call(phone_number):
+    try:
+        import subprocess
+        cmd = ["termux-telephony-call", str(phone_number)]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        if res.returncode == 0:
+            return f"Success: Initiated phone call to {phone_number}."
+        return f"Error making call: {res.stderr}"
+    except Exception as e:
+        return f"Error executing phone call tool: {str(e)}"
+
+def send_sms(phone_number, message):
+    try:
+        import subprocess
+        cmd = ["termux-sms-send", "-n", str(phone_number), message]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=8)
+        if res.returncode == 0:
+            return f"Success: SMS sent to {phone_number}."
+        return f"Error sending SMS: {res.stderr}"
+    except Exception as e:
+        return f"Error executing SMS tool: {str(e)}"
+
+def set_brightness(level):
+    try:
+        import subprocess
+        # level: 0 to 255
+        level_val = max(0, min(int(level), 255))
+        cmd = ["termux-brightness", str(level_val)]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        if res.returncode == 0:
+            return f"Success: Screen brightness set to {level_val}."
+        return f"Error setting brightness: {res.stderr}"
+    except Exception as e:
+        return f"Error executing brightness tool: {str(e)}"
+
+def set_volume(stream, level):
+    try:
+        import subprocess
+        # stream: music, ring, alarm, notification, system
+        # level: varies by stream, usually 0 to 15
+        cmd = ["termux-volume", str(stream), str(level)]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        if res.returncode == 0:
+            return f"Success: Volume for stream '{stream}' set to {level}."
+        return f"Error setting volume: {res.stderr}"
+    except Exception as e:
+        return f"Error executing volume tool: {str(e)}"
+
+# =======================================================
+# LOCAL ADB AUTOMATION CONTROLLER (SCREEN CONTROL)
+# =======================================================
+def run_adb_command(cmd_str):
+    try:
+        import subprocess
+        # Run local adb command on loopback interface
+        res = subprocess.run(f"adb {cmd_str}", shell=True, capture_output=True, text=True, timeout=15)
+        if res.returncode == 0:
+            return True, res.stdout
+        return False, res.stderr
+    except Exception as e:
+        return False, str(e)
+
+def take_screenshot():
+    # 1. Verify ADB connection state
+    ok, out = run_adb_command("devices")
+    if not ok or len([line for line in out.strip().split("\n") if "device" in line and not "devices" in line]) == 0:
+        return "Error: Local ADB is not connected. Enable 'Wireless Debugging' in Android Developer Options, connect Termux locally (e.g. run 'adb connect localhost:5555' in terminal), and try again."
+        
+    target_name = "captured_screenshot.png"
+    target_path = os.path.join(WORKSPACE_DIR, target_name)
+    
+    if os.path.exists(target_path):
+        try: os.remove(target_path)
+        except Exception: pass
+        
+    # 2. Capture screenshot on phone storage
+    ok, out = run_adb_command("shell screencap -p /sdcard/screenshot.png")
+    if not ok:
+        return f"Error: Screen capture command failed. Details: {out}"
+        
+    # 3. Pull photo from device storage to Termux workspace
+    ok, out = run_adb_command(f"pull /sdcard/screenshot.png {target_path}")
+    if not ok:
+        return f"Error: Failed to transfer screenshot to workspace. Details: {out}"
+        
+    # Clean up device temp file
+    run_adb_command("shell rm /sdcard/screenshot.png")
+    
+    return f"Success: Screenshot captured. Saved to workspace as '{target_name}'. Path: {target_path}."
+
+def tap_screen(x, y):
+    ok, out = run_adb_command("devices")
+    if not ok or len([line for line in out.strip().split("\n") if "device" in line and not "devices" in line]) == 0:
+        return "Error: ADB is not connected. Connect Termux to local Wireless Debugging first."
+        
+    ok, out = run_adb_command(f"shell input tap {int(x)} {int(y)}")
+    if ok:
+        return f"Success: Simulated screen tap at coordinates ({int(x)}, {int(y)})."
+    return f"Error simulating tap: {out}"
+
+def swipe_screen(x1, y1, x2, y2, duration_ms=500):
+    ok, out = run_adb_command("devices")
+    if not ok or len([line for line in out.strip().split("\n") if "device" in line and not "devices" in line]) == 0:
+        return "Error: ADB is not connected. Connect Termux to local Wireless Debugging first."
+        
+    ok, out = run_adb_command(f"shell input swipe {int(x1)} {int(y1)} {int(x2)} {int(y2)} {int(duration_ms)}")
+    if ok:
+        return f"Success: Simulated screen swipe from ({int(x1)}, {int(y1)}) to ({int(x2)}, {int(y2)}) over {duration_ms}ms."
+    return f"Error simulating swipe: {out}"
+
+def press_key(key_code):
+    # Key event codes: 3=Home, 4=Back, 26=Power, 24=VolumeUp, 25=VolumeDown, 82=Unlock
+    ok, out = run_adb_command("devices")
+    if not ok or len([line for line in out.strip().split("\n") if "device" in line and not "devices" in line]) == 0:
+        return "Error: ADB is not connected. Connect Termux to local Wireless Debugging first."
+        
+    ok, out = run_adb_command(f"shell input keyevent {int(key_code)}")
+    if ok:
+        return f"Success: Simulated physical key press event code {int(key_code)}."
+    return f"Error simulating key event: {out}"
+
+def launch_app(package_name):
+    ok, out = run_adb_command("devices")
+    if not ok or len([line for line in out.strip().split("\n") if "device" in line and not "devices" in line]) == 0:
+        return "Error: ADB is not connected. Connect Termux to local Wireless Debugging first."
+        
+    ok, out = run_adb_command(f"shell monkey -p {package_name} -c android.intent.category.LAUNCHER 1")
+    if ok:
+        return f"Success: Opened application matching package name '{package_name}'."
+    return f"Error launching application: {out}"
+
 def web_search(query):
     try:
         import urllib.parse
@@ -1131,6 +1294,60 @@ def execute_local_tool(name, args_str):
             if port_number is None:
                 return "Error: Missing required argument 'port_number'."
             return subnet_port_sweep(port_number)
+        elif name == "take_camera_photo":
+            camera_id = kwargs.get("camera_id", "0")
+            return take_camera_photo(camera_id)
+        elif name == "get_phone_location":
+            return get_phone_location()
+        elif name == "make_phone_call":
+            phone_number = kwargs.get("phone_number")
+            if not phone_number:
+                return "Error: Missing required argument 'phone_number'."
+            return make_phone_call(phone_number)
+        elif name == "send_sms":
+            phone_number = kwargs.get("phone_number")
+            message = kwargs.get("message")
+            if not phone_number or not message:
+                return "Error: Missing required arguments 'phone_number' and/or 'message'."
+            return send_sms(phone_number, message)
+        elif name == "set_brightness":
+            level = kwargs.get("level")
+            if level is None:
+                return "Error: Missing required argument 'level'."
+            return set_brightness(level)
+        elif name == "set_volume":
+            stream = kwargs.get("stream")
+            level = kwargs.get("level")
+            if not stream or level is None:
+                return "Error: Missing required arguments 'stream' and/or 'level'."
+            return set_volume(stream, level)
+        elif name == "take_screenshot":
+            return take_screenshot()
+        elif name == "tap_screen":
+            x = kwargs.get("x")
+            y = kwargs.get("y")
+            if x is None or y is None:
+                return "Error: Missing required arguments 'x' and/or 'y'."
+            return tap_screen(x, y)
+        elif name == "swipe_screen":
+            x1 = kwargs.get("x1")
+            y1 = kwargs.get("y1")
+            x2 = kwargs.get("x2")
+            y2 = kwargs.get("y2")
+            duration_ms = kwargs.get("duration_ms", 500)
+            if x1 is None or y1 is None or x2 is None or y2 is None:
+                return "Error: Missing required coordinate parameters."
+            return swipe_screen(x1, y1, x2, y2, duration_ms)
+        elif name == "press_key":
+            key_code = kwargs.get("key_code")
+            if key_code is None:
+                return "Error: Missing required argument 'key_code'."
+            return press_key(key_code)
+        elif name == "launch_app":
+            package_name = kwargs.get("package_name")
+            if not package_name:
+                return "Error: Missing required argument 'package_name'."
+            return launch_app(package_name)
         else:
             return f"Error: Tool '{name}' is not recognized."
     except Exception as e:
@@ -1540,8 +1757,24 @@ def telegram_bot_loop(token):
                 ai_response, updated_history = get_ai_response_with_tools(sessions[chat_id])
                 sessions[chat_id] = updated_history
                 
-                # Send back to Telegram
+                # Check if camera photo was successfully captured in the chat session
+                photo_path = os.path.join(WORKSPACE_DIR, "captured_photo.jpg")
+                screenshot_path = os.path.join(WORKSPACE_DIR, "captured_screenshot.png")
+                
+                # Send back text response first
                 send_telegram_msg(token, chat_id, ai_response)
+                
+                # Upload files to Telegram chat automatically if created/modified during execution
+                if "captured_photo.jpg" in ai_response.lower() and os.path.exists(photo_path):
+                    send_telegram_photo(token, chat_id, photo_path, caption="📸 PocketstrikeAI Camera Capture")
+                    # Clean up file to prevent duplicate triggers
+                    try: os.remove(photo_path)
+                    except Exception: pass
+                    
+                if "captured_screenshot.png" in ai_response.lower() and os.path.exists(screenshot_path):
+                    send_telegram_photo(token, chat_id, screenshot_path, caption="📱 PocketstrikeAI Screenshot Capture")
+                    try: os.remove(screenshot_path)
+                    except Exception: pass
 
         except Exception as e:
             print(f"Telegram Bot error: {e}")
@@ -1561,6 +1794,22 @@ def send_telegram_msg(token, chat_id, text):
         # Fallback to plain text if Telegram fails due to malformed markdown
         payload.pop("parse_mode", None)
         requests.post(url, json=payload)
+
+def send_telegram_photo(token, chat_id, photo_path, caption=None):
+    url = f"https://api.telegram.org/bot{token}/sendPhoto"
+    try:
+        if not os.path.exists(photo_path):
+            return False
+        with open(photo_path, 'rb') as photo_file:
+            files = {'photo': photo_file}
+            data = {'chat_id': chat_id}
+            if caption:
+                data['caption'] = caption
+            res = requests.post(url, data=data, files=files, timeout=30)
+            return res.status_code == 200
+    except Exception as e:
+        print(f"Error sending photo to Telegram: {e}")
+        return False
 
 # Web Server Routes
 @app.route('/')
