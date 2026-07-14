@@ -6,6 +6,9 @@ import socket
 import threading
 import time
 import requests
+import re
+import ast
+import shutil
 from flask import Flask, request, jsonify, render_template, send_from_directory
 
 # Setup Flask App
@@ -41,6 +44,287 @@ def get_local_ip():
     finally:
         s.close()
     return ip
+
+# ==========================================
+# CUSTOM AI TOOLS DEFINITIONS
+# ==========================================
+
+def get_system_prompt():
+    return """You are PKST AI, a powerful local security and system assistant running in Termux on the user's Android phone.
+You have access to local tools that can inspect system state, perform network scans, and read/write files.
+If you need to use a tool to answer the user's request, you must respond with EXACTLY this trigger format and nothing else in that turn:
+[TOOL_CALL: tool_name(arg1="value", arg2="value")]
+
+Available Tools:
+1. get_system_stats()
+   Returns battery level, charging status, free RAM, and storage space in Termux home.
+2. local_port_scan(target_ip, ports_list=[...])
+   Scans a target IP address for open ports. Use lists like [22, 80, 443]. Keep target list short.
+3. list_directory(path=".")
+   Lists files and directories at the given path (default: current directory).
+4. read_file_content(file_path)
+   Reads the content of a text file.
+5. write_file_content(file_path, content)
+   Creates or overwrites a file with content. Useful for writing scripts.
+
+Instructions:
+- When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
+- Once you receive the tool result, read it carefully and answer the user's question directly.
+- Maintain a helpful, technical, and professional tone.
+"""
+
+def get_system_stats():
+    stats = {}
+    # Battery Capacity
+    try:
+        if os.path.exists("/sys/class/power_supply/battery/capacity"):
+            with open("/sys/class/power_supply/battery/capacity", "r") as f:
+                stats["battery_level"] = f.read().strip() + "%"
+            with open("/sys/class/power_supply/battery/status", "r") as f:
+                stats["battery_status"] = f.read().strip()
+        else:
+            raise FileNotFoundError()
+    except Exception:
+        # Fallback to termux command if available
+        try:
+            import subprocess
+            res = subprocess.run(["termux-battery-status"], capture_output=True, text=True, timeout=2)
+            if res.returncode == 0:
+                bat = json.loads(res.stdout)
+                stats["battery_level"] = f"{bat.get('percentage')}%"
+                stats["battery_status"] = bat.get("status")
+        except Exception:
+            stats["battery_level"] = "Unknown"
+            stats["battery_status"] = "Unknown"
+            
+    # Disk Storage (Free Space in Termux home)
+    try:
+        total, used, free = shutil.disk_usage(os.path.expanduser("~"))
+        stats["storage_total"] = f"{total / (2**30):.2f} GB"
+        stats["storage_used"] = f"{used / (2**30):.2f} GB"
+        stats["storage_free"] = f"{free / (2**30):.2f} GB"
+    except Exception as e:
+        stats["storage_error"] = str(e)
+        
+    # RAM Free (from /proc/meminfo)
+    try:
+        if os.path.exists("/proc/meminfo"):
+            with open("/proc/meminfo", "r") as f:
+                lines = f.readlines()
+                mem_total = 0
+                mem_free = 0
+                mem_avail = 0
+                for line in lines:
+                    if "MemTotal" in line:
+                        mem_total = int(line.split()[1])
+                    elif "MemFree" in line:
+                        mem_free = int(line.split()[1])
+                    elif "MemAvailable" in line:
+                        mem_avail = int(line.split()[1])
+                if mem_total:
+                    stats["ram_total"] = f"{mem_total / 1024:.2f} MB"
+                    stats["ram_free"] = f"{mem_free / 1024:.2f} MB"
+                    stats["ram_available"] = f"{mem_avail / 1024:.2f} MB"
+        else:
+            stats["ram"] = "Only readable on Android/Linux /proc/meminfo"
+    except Exception:
+        stats["ram"] = "Unknown"
+        
+    return json.dumps(stats, indent=2)
+
+def local_port_scan(target_ip, ports_list=None):
+    if not ports_list:
+        ports_list = [21, 22, 23, 25, 53, 80, 110, 139, 443, 445, 1024, 1433, 3306, 3389, 5000, 8080, 8888]
+    elif isinstance(ports_list, str):
+        try:
+            ports_list = json.loads(ports_list)
+        except Exception:
+            try:
+                ports_list = [int(p.strip()) for p in ports_list.strip("[]").split(",") if p.strip()]
+            except Exception:
+                ports_list = [22, 80, 443, 8080]
+                
+    open_ports = []
+    results = {"target": target_ip, "scanned_ports": len(ports_list)}
+    
+    # Limit number of ports to scan to prevent timeouts
+    ports_list = ports_list[:30]
+    
+    for port in ports_list:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(0.5)
+            result = s.connect_ex((target_ip, int(port)))
+            if result == 0:
+                open_ports.append(int(port))
+            s.close()
+        except Exception:
+            pass
+    results["open_ports"] = open_ports
+    return json.dumps(results, indent=2)
+
+def list_directory(path="."):
+    expanded_path = os.path.abspath(os.path.expanduser(path))
+    if not os.path.exists(expanded_path):
+        return f"Error: Path '{path}' does not exist."
+    try:
+        items = os.listdir(expanded_path)
+        results = []
+        for item in items:
+            item_path = os.path.join(expanded_path, item)
+            is_dir = os.path.isdir(item_path)
+            size = os.path.getsize(item_path) if not is_dir else 0
+            results.append({
+                "name": item,
+                "type": "directory" if is_dir else "file",
+                "size_bytes": size
+            })
+        return json.dumps(results, indent=2)
+    except Exception as e:
+        return f"Error listing directory: {str(e)}"
+
+def read_file_content(file_path):
+    expanded_path = os.path.abspath(os.path.expanduser(file_path))
+    if not os.path.exists(expanded_path):
+        return f"Error: File '{file_path}' does not exist."
+    if os.path.isdir(expanded_path):
+        return f"Error: '{file_path}' is a directory. Use list_directory to see its contents."
+        
+    try:
+        # Limit reading to first 15,000 characters to avoid token limit issues
+        with open(expanded_path, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read(15000)
+            if len(content) >= 15000:
+                return content + "\n\n[Content truncated due to size limit...]"
+            return content
+    except Exception as e:
+        return f"Error reading file: {str(e)}"
+
+def write_file_content(file_path, content):
+    expanded_path = os.path.abspath(os.path.expanduser(file_path))
+    try:
+        os.makedirs(os.path.dirname(expanded_path), exist_ok=True)
+        with open(expanded_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return f"Success: File '{file_path}' written successfully."
+    except Exception as e:
+        return f"Error writing file: {str(e)}"
+
+def parse_arguments(arg_str):
+    if not arg_str.strip():
+        return {}
+    kwargs = {}
+    pattern = r'(\w+)\s*=\s*("[^"]*"|\'[^\']*\'|\[[^\]]*\]|[^,]+)'
+    matches = re.findall(pattern, arg_str)
+    for key, val in matches:
+        val = val.strip()
+        if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+            val = val[1:-1]
+        elif val.startswith('[') and val.endswith(']'):
+            try:
+                val = json.loads(val.replace("'", '"'))
+            except Exception:
+                try:
+                    val = [int(x.strip()) for x in val[1:-1].split(",") if x.strip()]
+                except Exception:
+                    try:
+                        val = [x.strip().strip('"\'') for x in val[1:-1].split(",") if x.strip()]
+                    except Exception:
+                        pass
+        else:
+            if val.lower() == "true":
+                val = True
+            elif val.lower() == "false":
+                val = False
+            elif val.lower() == "none":
+                val = None
+            else:
+                try:
+                    val = int(val)
+                except ValueError:
+                    try:
+                        val = float(val)
+                    except ValueError:
+                        pass
+        kwargs[key] = val
+    return kwargs
+
+def execute_local_tool(name, args_str):
+    try:
+        kwargs = parse_arguments(args_str)
+        if name == "get_system_stats":
+            return get_system_stats()
+        elif name == "local_port_scan":
+            target_ip = kwargs.get("target_ip")
+            ports_list = kwargs.get("ports_list")
+            if not target_ip:
+                return "Error: Missing required argument 'target_ip'."
+            return local_port_scan(target_ip, ports_list)
+        elif name == "list_directory":
+            path = kwargs.get("path", ".")
+            return list_directory(path)
+        elif name == "read_file_content":
+            file_path = kwargs.get("file_path")
+            if not file_path:
+                return "Error: Missing required argument 'file_path'."
+            return read_file_content(file_path)
+        elif name == "write_file_content":
+            file_path = kwargs.get("file_path")
+            content = kwargs.get("content")
+            if not file_path or content is None:
+                return "Error: Missing required arguments 'file_path' and/or 'content'."
+            return write_file_content(file_path, content)
+        else:
+            return f"Error: Tool '{name}' is not recognized."
+    except Exception as e:
+        return f"Error executing tool: {str(e)}"
+
+def get_ai_response_with_tools(messages):
+    # Ensure system prompt is present at index 0
+    system_present = False
+    for msg in messages:
+        if msg["role"] == "system":
+            system_present = True
+            break
+            
+    if not system_present:
+        messages.insert(0, {
+            "role": "system",
+            "content": get_system_prompt()
+        })
+        
+    loop_count = 0
+    max_loops = 5
+    
+    while loop_count < max_loops:
+        response_text = call_ai_api(messages)
+        
+        # Check for tool call trigger
+        match = re.search(r'\[TOOL_CALL:\s*(\w+)\((.*)\)\s*\]', response_text)
+        if not match:
+            messages.append({"role": "assistant", "content": response_text})
+            return response_text, messages
+            
+        tool_name = match.group(1)
+        tool_args_str = match.group(2)
+        
+        print(f"🔧 AI requested tool: {tool_name}({tool_args_str})")
+        
+        # Execute tool
+        tool_result = execute_local_tool(tool_name, tool_args_str)
+        
+        # Append tool call and output to conversation
+        messages.append({"role": "assistant", "content": response_text})
+        messages.append({
+            "role": "user",
+            "content": f"[TOOL_RESULT: {tool_name} output]\n{tool_result}"
+        })
+        
+        loop_count += 1
+        
+    fallback = "Error: Tool execution loop limit reached."
+    messages.append({"role": "assistant", "content": fallback})
+    return fallback, messages
 
 # Call selected AI provider
 def call_ai_api(messages):
@@ -205,11 +489,9 @@ def telegram_bot_loop(token):
                 # Send typing status
                 requests.post(f"https://api.telegram.org/bot{token}/sendChatAction", json={"chat_id": chat_id, "action": "typing"})
 
-                # Get AI answer
-                ai_response = call_ai_api(sessions[chat_id])
-                
-                # Append AI response to session
-                sessions[chat_id].append({"role": "assistant", "content": ai_response})
+                # Get AI answer (handles ReAct tool calls internally)
+                ai_response, updated_history = get_ai_response_with_tools(sessions[chat_id])
+                sessions[chat_id] = updated_history
                 
                 # Send back to Telegram
                 send_telegram_msg(token, chat_id, ai_response)
@@ -245,8 +527,11 @@ def chat():
     if not messages:
         return jsonify({"error": "No messages provided"}), 400
         
-    response_text = call_ai_api(messages)
-    return jsonify({"response": response_text})
+    response_text, updated_messages = get_ai_response_with_tools(messages)
+    return jsonify({
+        "response": response_text,
+        "updated_messages": updated_messages
+    })
 
 @app.route('/api/status', methods=['GET'])
 def get_status():

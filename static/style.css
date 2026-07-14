@@ -980,3 +980,115 @@ body.light-mode .message-bubble pre {
         max-width: 85%;
     }
 }
+
+/* Custom AI Tools UI Elements */
+.tool-call-badge {
+    background: rgba(var(--accent-primary-rgb), 0.08);
+    border: 1px dashed rgba(var(--accent-primary-rgb), 0.35);
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.5rem 0;
+    font-size: 0.85rem;
+}
+
+.tool-icon {
+    font-size: 0.95rem;
+}
+
+.tool-label {
+    color: var(--text-muted);
+}
+
+.tool-name {
+    font-family: monospace;
+    color: var(--accent-primary) !important;
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+}
+
+.tool-result-box {
+    background: #0d0d10;
+    border: 1px solid var(--border-glass);
+    border-radius: 8px;
+    margin: 0.75rem 0;
+    overflow: hidden;
+}
+
+body.light-mode .tool-result-box {
+    background: #f4f4f7;
+    border-color: #e4e4e7;
+}
+
+.tool-result-header {
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid var(--border-glass);
+    padding: 0.35rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+body.light-mode .tool-result-header {
+    background: rgba(0, 0, 0, 0.02);
+    border-bottom-color: #e4e4e7;
+    color: #52525b;
+}
+
+.tool-result-content {
+    margin: 0 !important;
+    padding: 0.75rem !important;
+    background: transparent !important;
+    border: none !important;
+}
+
+.tool-result-content code {
+    font-family: 'Courier New', Courier, monospace !important;
+    font-size: 0.8rem !important;
+    color: #a1a1aa !important;
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    white-space: pre-wrap;
+}
+
+body.light-mode .tool-result-content code {
+    color: #3f3f46 !important;
+}
+
+/* System-level tool result layout alignment override */
+.message.system-tool-result {
+    justify-content: flex-start;
+}
+
+.message.system-tool-result .message-avatar {
+    background: #1c1917;
+    border: 1px solid #78716c;
+}
+
+body.light-mode .message.system-tool-result .message-avatar {
+    background: #f5f5f4;
+    border-color: #d6d3d1;
+}
+
+.message.system-tool-result .message-avatar svg {
+    color: #a8a29e;
+}
+
+body.light-mode .message.system-tool-result .message-avatar svg {
+    color: #78716c;
+}
+
+.message.system-tool-result .message-bubble {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+}
+

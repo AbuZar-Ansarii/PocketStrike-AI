@@ -275,7 +275,11 @@ async function handleSend() {
 
         if (response.ok) {
             const data = await response.json();
-            activeChat.messages.push({ role: 'assistant', content: data.response });
+            if (data.updated_messages) {
+                activeChat.messages = data.updated_messages;
+            } else {
+                activeChat.messages.push({ role: 'assistant', content: data.response });
+            }
         } else {
             const errText = await response.text();
             activeChat.messages.push({ role: 'assistant', content: `⚠️ Error from server (Status ${response.status}): ${errText}` });
@@ -384,15 +388,25 @@ function renderMessages() {
     messagesContainer.innerHTML = '';
 
     activeChat.messages.forEach(msg => {
-        const isUser = msg.role === 'user';
+        if (msg.role === 'system') return; // Skip system messages
+
+        const isToolResult = msg.content.startsWith('[TOOL_RESULT:');
+        const isUser = msg.role === 'user' && !isToolResult;
+        
         const msgDiv = document.createElement('div');
-        msgDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
+        if (isToolResult) {
+            msgDiv.className = 'message system-tool-result';
+        } else {
+            msgDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
+        }
 
-        const avatarIcon = isUser 
-            ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`
-            : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>`;
+        const avatarIcon = isToolResult
+            ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>`
+            : (isUser 
+                ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`
+                : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>`);
 
-        const renderedContent = isUser ? escapeHtml(msg.content) : parseMarkdown(msg.content);
+        const renderedContent = (isUser && !isToolResult) ? escapeHtml(msg.content) : parseMarkdown(msg.content);
 
         msgDiv.innerHTML = `
             <div class="message-avatar">
@@ -546,6 +560,37 @@ function parseMarkdown(text) {
     for (let i = 0; i < codeBlocks.length; i++) {
         html = html.replace(`__CODE_BLOCK_PLACEHOLDER_${i}__`, codeBlocks[i]);
     }
+
+    // 8. Style tool calls and tool outputs
+    html = html.replace(/\[TOOL_CALL:\s*(\w+)\(([\s\S]*?)\)\s*\]/g, (match, tool, args) => {
+        const readableArgs = args
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>');
+        return `
+            <div class="tool-call-badge">
+                <span class="tool-icon">🔧</span>
+                <span class="tool-label">Executing Tool:</span>
+                <code class="tool-name">${tool}(${readableArgs})</code>
+            </div>
+        `;
+    });
+
+    html = html.replace(/\[TOOL_RESULT:\s*(\w+)\s*output\]\n([\s\S]*?)(?=(?:<div class="tool-call-badge"|<br><br>|\Z))/g, (match, tool, output) => {
+        const cleanOutput = output
+            .replace(/<br>/g, '\n')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>');
+        return `
+            <div class="tool-result-box">
+                <div class="tool-result-header">📥 System Response [${tool}]</div>
+                <pre class="tool-result-content"><code>${cleanOutput.trim()}</code></pre>
+            </div>
+        `;
+    });
 
     return html;
 }
