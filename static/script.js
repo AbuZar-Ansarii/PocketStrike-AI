@@ -54,9 +54,13 @@ function initEventListeners() {
     chatInput.addEventListener('input', autoGrowInput);
     chatInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSend();
+            const isMobile = window.innerWidth <= 768;
+            if (!isMobile) {
+                e.preventDefault();
+                handleSend();
+            }
         }
+        setTimeout(autoGrowInput, 0);
     });
 
     // Send Button Click

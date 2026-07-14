@@ -209,8 +209,22 @@ def get_system_stats():
     return json.dumps(stats, indent=2)
 
 def local_port_scan(target_ip, ports_list=None):
-    if not ports_list:
-        ports_list = [21, 22, 23, 25, 53, 80, 110, 139, 443, 445, 1024, 1433, 3306, 3389, 5000, 8080, 8888]
+    # Curated list of the top 100 most common network service ports
+    TOP_100_PORTS = [
+        21, 22, 23, 25, 53, 67, 68, 69, 80, 110, 111, 119, 123, 135, 137, 138, 139, 143, 161, 162,
+        179, 389, 443, 445, 465, 500, 514, 515, 548, 554, 587, 631, 636, 873, 990, 993, 995, 1025,
+        1080, 1433, 1434, 1521, 1723, 1812, 1813, 2049, 3000, 3128, 3268, 3306, 3389, 4443, 4500,
+        5000, 5060, 5061, 5432, 5631, 5632, 5900, 5984, 6000, 6379, 7077, 8000, 8080, 8081, 8443,
+        8888, 9000, 9092, 9100, 9200, 9418, 9999, 11211, 27017, 27018, 27019, 50030, 50070
+    ]
+
+    # Parse ports_list intelligently
+    if isinstance(ports_list, int):
+        ports_list = TOP_100_PORTS[:min(ports_list, 100)]
+    elif isinstance(ports_list, str) and ports_list.strip().isdigit():
+        ports_list = TOP_100_PORTS[:min(int(ports_list.strip()), 100)]
+    elif not ports_list:
+        ports_list = TOP_100_PORTS[:30] # Default to top 30 ports
     elif isinstance(ports_list, str):
         try:
             ports_list = json.loads(ports_list)
@@ -218,7 +232,7 @@ def local_port_scan(target_ip, ports_list=None):
             try:
                 ports_list = [int(p.strip()) for p in ports_list.strip("[]").split(",") if p.strip()]
             except Exception:
-                ports_list = [22, 80, 443, 8080]
+                ports_list = TOP_100_PORTS[:30]
                 
     # Parse target target hostname to IP
     try:
@@ -227,7 +241,7 @@ def local_port_scan(target_ip, ports_list=None):
         resolved_ip = target_ip
         
     open_ports = []
-    # Up target scanner speed & capacity (scan up to 100 ports simultaneously)
+    # Convert all items to integers and filter to top 100 limits
     ports_list = [int(p) for p in ports_list][:100]
     
     import concurrent.futures
