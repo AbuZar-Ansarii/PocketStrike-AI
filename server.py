@@ -169,6 +169,8 @@ Available Tools:
     Simulates a hardware key event (e.g. 3=Home, 4=Back, 26=Power, 82=Menu/Unlock) using local ADB.
 28. launch_app(package_name)
     Opens an application by its package name (e.g. 'com.whatsapp', 'com.android.chrome') using local ADB.
+29. control_android_system(action, target="")
+    Executes system utility commands on the device. Supported action tokens: 'flashlight_on', 'flashlight_off', 'wifi_on', 'wifi_off', 'bluetooth_on', 'bluetooth_off', 'dark_mode_on', 'dark_mode_off', 'battery_saver_on', 'battery_saver_off', 'dnd_on', 'dnd_off', 'auto_rotate_on', 'auto_rotate_off', 'expand_notifications', 'collapse_notifications', 'get_current_app', 'type_text'. target is used for 'type_text' (specify string to type).
 
 Instructions:
 - When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
@@ -1091,6 +1093,42 @@ def launch_app(package_name):
         return f"Success: Opened application matching package name '{package_name}'."
     return f"Error launching application: {out}"
 
+def control_android_system(action, target=""):
+    # Controls Android system parameters using local shell commands via Shizuku/ADB
+    cmd_map = {
+        "flashlight_on": "cmd notification set_flashlight 1",
+        "flashlight_off": "cmd notification set_flashlight 0",
+        "wifi_on": "svc wifi enable",
+        "wifi_off": "svc wifi disable",
+        "bluetooth_on": "svc bluetooth enable",
+        "bluetooth_off": "svc bluetooth disable",
+        "dark_mode_on": "cmd uimode night yes",
+        "dark_mode_off": "cmd uimode night no",
+        "battery_saver_on": "settings put global low_power 1",
+        "battery_saver_off": "settings put global low_power 0",
+        "dnd_on": "cmd notification set_dnd on",
+        "dnd_off": "cmd notification set_dnd off",
+        "auto_rotate_on": "settings put system accelerometer_rotation 1",
+        "auto_rotate_off": "settings put system accelerometer_rotation 0",
+        "expand_notifications": "cmd statusbar expand-notifications",
+        "collapse_notifications": "cmd statusbar collapse",
+        "get_current_app": "dumpsys window | grep mCurrentFocus",
+        "type_text": f"input text '{target}'"
+    }
+    
+    if action not in cmd_map:
+        return f"Error: Unsupported action '{action}'. Options: {', '.join(cmd_map.keys())}"
+        
+    ok, out = run_adb_command("devices")
+    if not ok or len([line for line in out.strip().split("\n") if "device" in line and not "devices" in line]) == 0:
+        return "Error: ADB/Shizuku is not connected. Make sure Shizuku or local Wireless Debugging is running."
+        
+    cmd = cmd_map[action]
+    ok, out = run_adb_command(f"shell {cmd}")
+    if ok:
+        return f"Success: Executed system action '{action}' on device. Output: {out.strip() if out else 'Done'}"
+    return f"Error executing system action '{action}': {out}"
+
 def web_search(query):
     try:
         import urllib.parse
@@ -1463,6 +1501,12 @@ def execute_local_tool(name, args_str):
             if not package_name:
                 return "Error: Missing required argument 'package_name'."
             return launch_app(package_name)
+        elif name == "control_android_system":
+            action = kwargs.get("action")
+            target = kwargs.get("target", "")
+            if not action:
+                return "Error: Missing required argument 'action'."
+            return control_android_system(action, target)
         else:
             return f"Error: Tool '{name}' is not recognized."
     except Exception as e:

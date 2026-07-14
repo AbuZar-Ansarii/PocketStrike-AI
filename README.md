@@ -99,6 +99,7 @@ PocketStrike AI has access to 28 local tools to audit, crawl, and control system
 | 26 | `swipe_screen(x1, y1, x2, y2, ms)`| Simulates a screen swipe gesture from (x1, y1) to (x2, y2) using local ADB. |
 | 27 | `press_key(key_code)` | Simulates a physical key event (Home, Back, Power, volume keys) using ADB. |
 | 28 | `launch_app(pkg_name)` | Opens any application on the device by its package bundle name using ADB. |
+| 29 | `control_android_system(act, tgt)`| Toggles flashlight, Wi-Fi, Bluetooth, dark mode, battery saver, DND, auto-rotate, expand/collapse notifications, gets current focal app, or types text. |
 
 ---
 
