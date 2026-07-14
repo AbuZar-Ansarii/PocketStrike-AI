@@ -126,6 +126,20 @@ Available Tools:
    Runs a Python script written by you inside your workspace directory and returns its output. Use this to run custom scripts, write new tools, or build calculations.
 7. execute_termux_command(command)
    Runs a shell command inside Termux (e.g. 'whoami', 'uname -a', 'ping', 'curl', 'nmap', etc.) and returns the standard output.
+8. web_search(query)
+   Scrapes DuckDuckGo HTML for live search results. Use this to lookup CVEs or current information.
+9. fetch_url(url)
+   Downloads clean text from any website (strips HTML layout) so you can read articles or documentation.
+10. get_network_details()
+    Returns network details including active interfaces, SSID, local subnet mask, and routing info.
+11. list_local_listeners()
+    Lists active listening ports on the local Termux host (like a netstat scan).
+12. send_android_notification(title, message)
+    Sends a system notification banner to the user's Android phone screen.
+13. vibrate_device(duration_ms)
+    Vibrates the phone for the specified duration (default: 500ms).
+14. search_files(pattern)
+    Searches for files recursively inside your workspace using glob patterns (e.g. "*.py").
 
 Instructions:
 - When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
@@ -359,6 +373,140 @@ def execute_termux_command(command):
     except Exception as e:
         return f"Error executing command: {str(e)}"
 
+def web_search(query):
+    try:
+        url = f"https://html.duckduckgo.com/html/?q={requests.utils.quote(query)}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        res = requests.get(url, headers=headers, timeout=15)
+        if res.status_code != 200:
+            return f"Error: Search failed (Status {res.status_code})."
+            
+        html = res.text
+        results = []
+        titles = re.findall(r'<a class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', html, re.DOTALL)
+        snippets = re.findall(r'<a class="result__snippet"[^>]*>(.*?)</a>', html, re.DOTALL)
+        
+        for i in range(min(len(titles), len(snippets), 5)):
+            url_match, title = titles[i]
+            title_clean = re.sub(r'<[^>]*>', '', title).strip()
+            snippet_clean = re.sub(r'<[^>]*>', '', snippets[i]).strip()
+            results.append(f"[{i+1}] {title_clean}\nLink: {url_match}\nSummary: {snippet_clean}")
+            
+        if not results:
+            return "No search results found or search was blocked."
+            
+        return "\n---\n".join(results)
+    except Exception as e:
+        return f"Error performing search: {str(e)}"
+
+def fetch_url(url):
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        res = requests.get(url, headers=headers, timeout=15)
+        if res.status_code != 200:
+            return f"Error: Page fetch failed (Status {res.status_code})."
+            
+        html = res.text
+        html_clean = re.sub(r'<(script|style).*?>([\s\S]*?)</\1>', '', html, flags=re.IGNORECASE)
+        text = re.sub(r'<[^>]*>', '', html_clean)
+        text = re.sub(r'\n\s*\n', '\n\n', text)
+        text = re.sub(r'[ \t]+', ' ', text)
+        
+        cleaned_text = text.strip()[:10000]
+        if len(text) > 10000:
+            cleaned_text += "\n\n[Content truncated due to size limit...]"
+        return cleaned_text
+    except Exception as e:
+        return f"Error fetching URL: {str(e)}"
+
+def get_network_details():
+    details = {}
+    try:
+        details["hostname"] = socket.gethostname()
+    except Exception:
+        pass
+        
+    try:
+        import subprocess
+        res = subprocess.run(["ip", "addr"], capture_output=True, text=True, timeout=5)
+        if res.returncode == 0:
+            details["interfaces"] = res.stdout
+        else:
+            res_if = subprocess.run(["ifconfig"], capture_output=True, text=True, timeout=5)
+            if res_if.returncode == 0:
+                details["interfaces"] = res_if.stdout
+    except Exception as e:
+        details["interfaces_error"] = str(e)
+        
+    try:
+        import subprocess
+        res = subprocess.run(["ip", "route"], capture_output=True, text=True, timeout=5)
+        if res.returncode == 0:
+            details["routing_table"] = res.stdout
+    except Exception:
+        pass
+        
+    return json.dumps(details, indent=2)
+
+def list_local_listeners():
+    try:
+        import subprocess
+        res = subprocess.run(["ss", "-tlnp"], capture_output=True, text=True, timeout=5)
+        if res.returncode == 0 and res.stdout.strip():
+            return res.stdout
+            
+        res = subprocess.run(["netstat", "-tlnp"], capture_output=True, text=True, timeout=5)
+        if res.returncode == 0 and res.stdout.strip():
+            return res.stdout
+            
+        res = subprocess.run(["netstat", "-an"], capture_output=True, text=True, timeout=5)
+        if res.returncode == 0:
+            lines = res.stdout.split("\n")
+            listeners = [line for line in lines if "LISTEN" in line]
+            return "\n".join(listeners) if listeners else "No active listeners found."
+    except Exception as e:
+        return f"Error retrieving listeners: {str(e)}"
+
+def send_android_notification(title, message):
+    try:
+        import subprocess
+        cmd = ["termux-notification", "-t", title, "-c", message]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        if res.returncode == 0:
+            return "Success: Notification sent."
+        return f"Error: Command exited with code {res.returncode}. Output: {res.stderr}"
+    except Exception as e:
+        return f"Error triggering notification: {str(e)} (Ensure Termux:API is installed)"
+
+def vibrate_device(duration_ms=500):
+    try:
+        import subprocess
+        cmd = ["termux-vibrate", "-d", str(duration_ms)]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        if res.returncode == 0:
+            return f"Success: Device vibrated for {duration_ms}ms."
+        return f"Error: Command exited with code {res.returncode}. Output: {res.stderr}"
+    except Exception as e:
+        return f"Error vibrating device: {str(e)} (Ensure Termux:API is installed)"
+
+def search_files(pattern):
+    try:
+        import fnmatch
+        matches = []
+        for root, dirnames, filenames in os.walk(WORKSPACE_DIR):
+            for filename in fnmatch.filter(filenames, pattern):
+                rel_dir = os.path.relpath(root, WORKSPACE_DIR)
+                matches.append(os.path.join(rel_dir, filename) if rel_dir != "." else filename)
+        if not matches:
+            return f"No files matching pattern '{pattern}' found."
+        return json.dumps(matches, indent=2)
+    except Exception as e:
+        return f"Error searching files: {str(e)}"
+
 def parse_arguments(arg_str):
     if not arg_str.strip():
         return {}
@@ -434,6 +582,34 @@ def execute_local_tool(name, args_str):
             if not command:
                 return "Error: Missing required argument 'command'."
             return execute_termux_command(command)
+        elif name == "web_search":
+            query = kwargs.get("query")
+            if not query:
+                return "Error: Missing required argument 'query'."
+            return web_search(query)
+        elif name == "fetch_url":
+            url = kwargs.get("url")
+            if not url:
+                return "Error: Missing required argument 'url'."
+            return fetch_url(url)
+        elif name == "get_network_details":
+            return get_network_details()
+        elif name == "list_local_listeners":
+            return list_local_listeners()
+        elif name == "send_android_notification":
+            title = kwargs.get("title")
+            message = kwargs.get("message")
+            if not title or not message:
+                return "Error: Missing required arguments 'title' and/or 'message'."
+            return send_android_notification(title, message)
+        elif name == "vibrate_device":
+            duration_ms = kwargs.get("duration_ms", 500)
+            return vibrate_device(duration_ms)
+        elif name == "search_files":
+            pattern = kwargs.get("pattern")
+            if not pattern:
+                return "Error: Missing required argument 'pattern'."
+            return search_files(pattern)
         else:
             return f"Error: Tool '{name}' is not recognized."
     except Exception as e:
