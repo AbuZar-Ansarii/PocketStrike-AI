@@ -177,6 +177,16 @@ Available Tools:
     Opens an application by its package name (e.g. 'com.whatsapp', 'com.android.chrome') (runs via local ADB or Shizuku shell).
 29. control_android_system(action, target="")
     Executes system utility commands on the device. Supported action tokens: 'flashlight_on', 'flashlight_off', 'wifi_on', 'wifi_off', 'bluetooth_on', 'bluetooth_off', 'dark_mode_on', 'dark_mode_off', 'battery_saver_on', 'battery_saver_off', 'dnd_on', 'dnd_off', 'auto_rotate_on', 'auto_rotate_off', 'expand_notifications', 'collapse_notifications', 'get_current_app', 'type_text'. target is used for 'type_text' (specify string to type).
+30. get_clipboard()
+    Returns the current text contents of the Android system clipboard.
+31. set_clipboard(text)
+    Overwrites the Android system clipboard with the specified text.
+32. list_installed_apps(user_only=True)
+    Lists all installed app package names and their APK paths. Defaults to listing third-party user-installed apps (specify user_only=False to list system apps as well).
+33. scan_wifi_networks()
+    Scans nearby Wi-Fi hotspots and returns network details (SSID, BSSID, RSSI, channel, security mode).
+34. speak_text(text)
+    Uses the Android Text-To-Speech engine to read the specified text aloud.
 
 Instructions:
 - When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
@@ -923,6 +933,73 @@ def set_volume(stream, level):
     except Exception as e:
         return f"Error executing volume tool: {str(e)}"
 
+def get_clipboard():
+    try:
+        import subprocess
+        res = subprocess.run(["termux-clipboard-get"], capture_output=True, text=True, timeout=5)
+        if res.returncode == 0:
+            return res.stdout.strip()
+        return f"Error getting clipboard: {res.stderr}"
+    except Exception as e:
+        return f"Error executing clipboard get: {str(e)} (Ensure Termux:API is installed)"
+
+def set_clipboard(text):
+    try:
+        import subprocess
+        res = subprocess.run(["termux-clipboard-set", text], capture_output=True, text=True, timeout=5)
+        if res.returncode == 0:
+            return "Success: Clipboard updated."
+        return f"Error setting clipboard: {res.stderr}"
+    except Exception as e:
+        return f"Error executing clipboard set: {str(e)} (Ensure Termux:API is installed)"
+
+def list_installed_apps(user_only=True):
+    try:
+        import subprocess
+        # -f lists package file locations, -3 lists only third-party (user-installed) apps
+        cmd = ["pm", "list", "packages", "-f"]
+        if user_only:
+            cmd.append("-3")
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=12)
+        if res.returncode != 0:
+            return f"Error listing packages: {res.stderr}"
+        
+        packages = []
+        for line in res.stdout.strip().split("\n"):
+            if line.startswith("package:"):
+                # line format: package:/data/app/~~.../base.apk=com.example.app
+                parts = line[8:].split("=")
+                if len(parts) >= 2:
+                    apk_path = parts[0]
+                    package_name = "=".join(parts[1:])
+                    packages.append({
+                        "package": package_name,
+                        "apk_path": apk_path
+                    })
+        return json.dumps(packages, indent=2)
+    except Exception as e:
+        return f"Error executing app audit: {str(e)}"
+
+def scan_wifi_networks():
+    try:
+        import subprocess
+        res = subprocess.run(["termux-wifi-scaninfo"], capture_output=True, text=True, timeout=12)
+        if res.returncode == 0:
+            return res.stdout.strip()
+        return f"Error scanning Wi-Fi: {res.stderr} (Ensure GPS location service is enabled and location permission is granted to Termux)"
+    except Exception as e:
+        return f"Error executing wifi scan: {str(e)} (Ensure Termux:API is installed)"
+
+def speak_text(text):
+    try:
+        import subprocess
+        res = subprocess.run(["termux-tts-speak", text], capture_output=True, text=True, timeout=8)
+        if res.returncode == 0:
+            return "Success: Speaking text."
+        return f"Error triggering speech: {res.stderr}"
+    except Exception as e:
+        return f"Error executing speak tool: {str(e)} (Ensure Termux:API is installed)"
+
 # =======================================================
 # LOCAL ADB AUTOMATION CONTROLLER (SCREEN CONTROL)
 # =======================================================
@@ -1537,6 +1614,23 @@ def execute_local_tool(name, args_str):
             if not action:
                 return "Error: Missing required argument 'action'."
             return control_android_system(action, target)
+        elif name == "get_clipboard":
+            return get_clipboard()
+        elif name == "set_clipboard":
+            text = kwargs.get("text")
+            if text is None:
+                return "Error: Missing required argument 'text'."
+            return set_clipboard(text)
+        elif name == "list_installed_apps":
+            user_only = kwargs.get("user_only", True)
+            return list_installed_apps(user_only)
+        elif name == "scan_wifi_networks":
+            return scan_wifi_networks()
+        elif name == "speak_text":
+            text = kwargs.get("text")
+            if not text:
+                return "Error: Missing required argument 'text'."
+            return speak_text(text)
         else:
             return f"Error: Tool '{name}' is not recognized."
     except Exception as e:
