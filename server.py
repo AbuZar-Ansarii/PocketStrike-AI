@@ -2055,9 +2055,19 @@ if __name__ == '__main__':
             if res.returncode == 0:
                 shizuku_status = "Active / Connected"
             else:
-                shizuku_status = "Daemon Stopped (Start Shizuku app)"
-        except Exception:
-            shizuku_status = "Daemon Stopped"
+                out = res.stdout.decode('utf-8', errors='ignore').strip() if res.stdout else ""
+                err = res.stderr.decode('utf-8', errors='ignore').strip() if res.stderr else ""
+                print(f"⚠️ Shizuku test failed (code {res.returncode}). stdout: '{out}', stderr: '{err}'")
+                if "permission" in err.lower() or "permission" in out.lower():
+                    shizuku_status = "Unauthorized (Approve Termux in Shizuku)"
+                else:
+                    shizuku_status = "Daemon Stopped (Start Shizuku app)"
+        except subprocess.TimeoutExpired:
+            print("⚠️ Shizuku test timed out after 4.5 seconds.")
+            shizuku_status = "Daemon Stopped (Timeout)"
+        except Exception as e:
+            print(f"⚠️ Shizuku test error: {str(e)}")
+            shizuku_status = f"Daemon Stopped ({type(e).__name__})"
     else:
         # Check if exported files exist in storage for auto-import
         shizuku_src = "/sdcard/Shizuku/rish"
