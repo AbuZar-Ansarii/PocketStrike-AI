@@ -921,7 +921,41 @@ def set_volume(stream, level):
 def run_adb_command(cmd_str):
     try:
         import subprocess
-        # Run local adb command on loopback interface
+        import shutil
+        
+        # Check if rish (Shizuku's Termux shell interface) is installed and available
+        use_shizuku = shutil.which("rish") is not None
+        
+        if use_shizuku:
+            # Route ADB shell commands directly through Shizuku Binder API
+            if cmd_str.startswith("shell "):
+                shell_cmd = cmd_str[6:] # Strip "shell "
+                res = subprocess.run(["rish", "-c", shell_cmd], capture_output=True, text=True, timeout=15)
+                if res.returncode == 0:
+                    return True, res.stdout
+                return False, res.stderr
+            elif cmd_str.startswith("devices"):
+                # Shizuku acts as a virtual local attached device
+                return True, "List of devices attached\nshizuku_localhost\tdevice"
+            elif cmd_str.startswith("pull "):
+                # For file transfers via Shizuku, we copy directly from Shared Storage /sdcard/
+                parts = cmd_str.split()
+                if len(parts) >= 3:
+                    src = parts[1]
+                    dest = parts[2]
+                    if src.startswith("/sdcard/"):
+                        # Translate /sdcard/ to local Termux storage mount
+                        shared_base = os.path.expanduser("~/storage/shared/")
+                        rel_path = src[8:] # Strip "/sdcard/"
+                        actual_src = os.path.join(shared_base, rel_path)
+                        if os.path.exists(actual_src):
+                            try:
+                                shutil.copy(actual_src, dest)
+                                return True, "Pulled via Shizuku shared storage"
+                            except Exception as e:
+                                return False, f"Shizuku copy error: {e}"
+                                
+        # Standard ADB runner fallback
         res = subprocess.run(f"adb {cmd_str}", shell=True, capture_output=True, text=True, timeout=15)
         if res.returncode == 0:
             return True, res.stdout
