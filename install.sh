@@ -29,9 +29,9 @@ else
     exit 1
 fi
 
-# 2. Install Python, Git, Termux-API, and Android-Tools
-echo -e "\n${BLUE}[2/4] Installing Python, Git, Termux-API, and Android-Tools...${NC}"
-pkg install -y python git termux-api android-tools || {
+# 2. Install required system and network tools
+echo -e "\n${BLUE}[2/4] Installing required system and network tools...${NC}"
+pkg install -y python git termux-api android-tools nmap dnsutils curl || {
     echo -e "${RED}Error: Failed to install required system packages. Please check your internet connection or Termux repositories.${NC}"
     exit 1
 }
