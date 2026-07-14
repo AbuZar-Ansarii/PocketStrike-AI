@@ -45,6 +45,12 @@ def get_local_ip():
         s.close()
     return ip
 
+# Get Termux Package Name/Application ID
+def get_termux_package_id():
+    prefix = os.environ.get("PREFIX", "/data/data/com.termux/files/usr")
+    match = re.search(r'/data/data/([^/]+)', prefix)
+    return match.group(1) if match else "com.termux"
+
 # ==========================================
 # CUSTOM AI TOOLS DEFINITIONS
 # ==========================================
@@ -981,7 +987,7 @@ def run_adb_command(cmd_str):
         if use_shizuku:
             # Set application environment ID required by Shizuku binder API
             env = os.environ.copy()
-            env["RISH_APPLICATION_ID"] = "com.termux"
+            env["RISH_APPLICATION_ID"] = get_termux_package_id()
             # Clear Termux library paths so system app_process works correctly
             env.pop("LD_LIBRARY_PATH", None)
             env.pop("LD_PRELOAD", None)
@@ -1042,7 +1048,7 @@ def take_screenshot():
         rish_path = shutil.which("rish") or "/data/data/com.termux/files/usr/bin/rish"
         
         env = os.environ.copy()
-        env["RISH_APPLICATION_ID"] = "com.termux"
+        env["RISH_APPLICATION_ID"] = get_termux_package_id()
         env.pop("LD_LIBRARY_PATH", None)
         env.pop("LD_PRELOAD", None)
         shell_exe = "/system/bin/sh" if os.path.exists("/system/bin/sh") else "sh"
@@ -2062,7 +2068,7 @@ if __name__ == '__main__':
         try:
             import subprocess
             env = os.environ.copy()
-            env["RISH_APPLICATION_ID"] = "com.termux"
+            env["RISH_APPLICATION_ID"] = get_termux_package_id()
             env.pop("LD_LIBRARY_PATH", None)
             env.pop("LD_PRELOAD", None)
             shell_exe = "/system/bin/sh" if os.path.exists("/system/bin/sh") else "sh"
@@ -2087,11 +2093,27 @@ if __name__ == '__main__':
             shizuku_status = f"Daemon Stopped ({type(e).__name__})"
     else:
         # Check if exported files exist in storage for auto-import
-        shizuku_src = "/sdcard/Shizuku/rish"
-        if not os.path.exists(shizuku_src):
-            shizuku_src = os.path.expanduser("~/storage/shared/Shizuku/rish")
-            
-        if os.path.exists(shizuku_src):
+        possible_srcs = [
+            "/sdcard/Shizuku/rish",
+            "/storage/emulated/0/Shizuku/rish",
+            os.path.expanduser("~/storage/shared/Shizuku/rish"),
+            os.path.expanduser("~/storage/downloads/rish"),
+            os.path.expanduser("~/storage/downloads/Shizuku/rish"),
+            "/sdcard/Download/rish",
+            "/sdcard/Download/Shizuku/rish",
+            "/storage/emulated/0/Download/rish",
+            "/storage/emulated/0/Download/Shizuku/rish",
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "rish")),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "workspace", "rish"))
+        ]
+        
+        shizuku_src = None
+        for path in possible_srcs:
+            if os.path.exists(path):
+                shizuku_src = path
+                break
+                
+        if shizuku_src:
             shizuku_status = "Exported Files Detected (Will auto-install)"
         else:
             shizuku_status = "Not Configured (Export files via Shizuku)"
