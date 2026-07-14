@@ -2099,9 +2099,11 @@ if __name__ == '__main__':
                     if os.path.exists(dex_file):
                         os.chmod(dex_file, 0o444)
                     shizuku_provisioned = True
-                    print("PocketstrikeAI: Auto-installed Shizuku rish binaries on startup!")
+                    print(f"PocketstrikeAI: Auto-installed Shizuku rish binaries on startup from {shizuku_src}!")
             except Exception as e:
                 print(f"PocketstrikeAI: Startup Shizuku auto-install failed: {e}")
+        else:
+            print("⚠️ Shizuku 'rish' not found in PATH or storage. Put 'rish' and 'rish_shizuku.dex' in your phone's main Downloads folder or in the project directory.")
 
     if shizuku_provisioned:
         try:
@@ -2113,51 +2115,58 @@ if __name__ == '__main__':
             shell_exe = "/system/bin/sh" if os.path.exists("/system/bin/sh") else "sh"
             
             # Fast test call to rish to check if binder is active and approved
-            res = subprocess.run([shell_exe, shutil.which("rish"), "-c", "echo 1"], capture_output=True, timeout=4.5, env=env)
-            if res.returncode == 0:
-                shizuku_status = "Active / Connected"
-            else:
+            # Use 2.0s timeout: if it hangs, it is likely waiting for authorization
+            try:
+                res = subprocess.run([shell_exe, shutil.which("rish"), "-c", "echo 1"], capture_output=True, timeout=2.0, env=env)
+                is_ok = (res.returncode == 0)
                 out = res.stdout.decode('utf-8', errors='ignore').strip() if res.stdout else ""
                 err = res.stderr.decode('utf-8', errors='ignore').strip() if res.stderr else ""
+                need_auth = (res.returncode == 1 or "permission" in err.lower() or "permission" in out.lower())
+            except subprocess.TimeoutExpired:
+                is_ok = False
+                need_auth = True
+                out, err = "", ""
+            
+            if is_ok:
+                shizuku_status = "Active / Connected"
+            elif need_auth:
+                print("\n\033[1;33m📣 [Shizuku Authorization Required]\033[0m")
+                print("\033[38;5;46m  Please check your phone screen now!\033[0m")
+                print("\033[38;5;255m  A popup will request permission for Termux to access Shizuku.\033[0m")
+                print("\033[1;32m  👉 Tap 'Always Allow' or 'Allow' to authorize the agent. 👈\033[0m\n")
                 
-                # If unauthorized, try to auto-trigger the permission popup via a PTY terminal mock!
-                if res.returncode == 1 or "permission" in err.lower() or "permission" in out.lower():
-                    print("\n\033[1;33m📣 [Shizuku Authorization Required]\033[0m")
-                    print("\033[38;5;46m  Please check your phone screen now!\033[0m")
-                    print("\033[38;5;255m  A popup will request permission for Termux to access Shizuku.\033[0m")
-                    print("\033[1;32m  👉 Tap 'Always Allow' or 'Allow' to authorize the agent. 👈\033[0m\n")
+                try:
+                    import pty
+                    master, slave = pty.openpty()
+                    # Spawn rish in a pty so it thinks it is in an interactive terminal and triggers popup
+                    p = subprocess.Popen(
+                        [shutil.which("rish")],
+                        stdin=slave,
+                        stdout=slave,
+                        stderr=slave,
+                        env=env,
+                        preexec_fn=os.setsid if hasattr(os, 'setsid') else None
+                    )
+                    # Keep it open for 10 seconds to give user time to click Allow
+                    time.sleep(10.0)
+                    p.terminate()
+                    p.wait(timeout=2.0)
+                except Exception as pty_err:
+                    print(f"  (Failed to start pty trigger: {pty_err})")
                     
-                    try:
-                        import pty
-                        master, slave = pty.openpty()
-                        # Spawn rish in a pty so it thinks it is in an interactive terminal and triggers popup
-                        p = subprocess.Popen(
-                            [shutil.which("rish")],
-                            stdin=slave,
-                            stdout=slave,
-                            stderr=slave,
-                            env=env,
-                            preexec_fn=os.setsid if hasattr(os, 'setsid') else None
-                        )
-                        # Keep it open for 8 seconds to give user time to click Allow
-                        time.sleep(8.0)
-                        p.terminate()
-                        p.wait(timeout=2.0)
-                    except Exception as pty_err:
-                        print(f"  (Failed to start pty trigger: {pty_err})")
-                        
-                    # Re-test connection state
-                    res_retry = subprocess.run([shell_exe, shutil.which("rish"), "-c", "echo 1"], capture_output=True, timeout=4.5, env=env)
+                # Re-test connection state
+                try:
+                    res_retry = subprocess.run([shell_exe, shutil.which("rish"), "-c", "echo 1"], capture_output=True, timeout=3.5, env=env)
                     if res_retry.returncode == 0:
                         print("\033[38;5;46m[✓] Shizuku authorization successful!\033[0m\n")
                         shizuku_status = "Active / Connected"
                     else:
                         shizuku_status = "Unauthorized (Approve Termux in Shizuku)"
-                else:
-                    shizuku_status = "Daemon Stopped (Start Shizuku app)"
-        except subprocess.TimeoutExpired:
-            print("⚠️ Shizuku test timed out after 4.5 seconds.")
-            shizuku_status = "Daemon Stopped (Timeout)"
+                except subprocess.TimeoutExpired:
+                    shizuku_status = "Unauthorized (Authorization Timeout)"
+            else:
+                print(f"⚠️ Shizuku test failed (code {res.returncode}). stdout: '{out}', stderr: '{err}'")
+                shizuku_status = "Daemon Stopped (Start Shizuku app)"
         except Exception as e:
             print(f"⚠️ Shizuku test error: {str(e)}")
             shizuku_status = f"Daemon Stopped ({type(e).__name__})"
