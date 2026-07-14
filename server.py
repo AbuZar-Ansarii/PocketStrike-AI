@@ -50,19 +50,36 @@ def get_local_ip():
 # ==========================================
 
 # Define Android Internal Storage Workspace Folder
-WORKSPACE_DIR = os.path.expanduser("~/storage/shared/PocketStrike-AI")
-try:
-    os.makedirs(WORKSPACE_DIR, exist_ok=True)
-except Exception:
-    # Fallback to local project workspace folder if running on PC or not accessible
-    WORKSPACE_DIR = os.path.abspath("workspace")
-    os.makedirs(WORKSPACE_DIR, exist_ok=True)
+def get_android_workspace():
+    paths = [
+        os.path.expanduser("~/storage/shared/PocketStrike-AI"),
+        "/sdcard/PocketStrike-AI",
+        "/storage/emulated/0/PocketStrike-AI"
+    ]
+    for p in paths:
+        try:
+            # Check if parent is writable/exists, or try making the dir
+            parent = os.path.dirname(p)
+            if os.path.exists(parent) and os.access(parent, os.W_OK):
+                os.makedirs(p, exist_ok=True)
+                return os.path.abspath(p)
+            os.makedirs(p, exist_ok=True)
+            return os.path.abspath(p)
+        except Exception:
+            continue
+    # Fallback to local subdirectory if shared storage is not accessible (e.g. running on PC/dev host)
+    fallback = os.path.abspath(os.path.join(os.path.dirname(__file__), "workspace"))
+    os.makedirs(fallback, exist_ok=True)
+    return fallback
+
+WORKSPACE_DIR = get_android_workspace()
 
 def get_system_prompt():
     return f"""You are PKST AI, a powerful local security and system assistant running in Termux on the user's Android phone.
 You have access to local tools that can inspect system state, perform network scans, and read/write files.
 Your workspace directory is: {WORKSPACE_DIR} (which is located in the phone's internal storage).
 All file tools (list_directory, read_file_content, write_file_content) resolve relative paths inside this workspace directory. Always write/save files requested by the user inside this workspace folder.
+Critical: You are forbidden from modifying, writing, or deleting files outside this workspace directory, especially the server's own scripts (server.py, setup.py, launch.sh, etc.) to prevent messing with your own running code.
 
 If you need to use a tool to answer the user's request, you must respond with EXACTLY this trigger format and nothing else in that turn:
 [TOOL_CALL: tool_name(arg1="value", arg2="value")]
@@ -228,11 +245,23 @@ def write_file_content(file_path, content):
     else:
         target_path = os.path.abspath(os.path.expanduser(file_path))
         
+    # Security Sandbox Check: Prevent path traversal or writing outside the workspace directory
+    real_target = os.path.realpath(target_path)
+    real_workspace = os.path.realpath(WORKSPACE_DIR)
+    
+    if not real_target.startswith(real_workspace):
+        return f"Error: Write access denied. You are only allowed to write files inside your workspace: {WORKSPACE_DIR}"
+        
+    # Prevent touching main codebase files specifically by name (extra safety check)
+    forbidden_files = ["server.py", "setup.py", "launch.sh", "install.sh", "config.json"]
+    if os.path.basename(real_target) in forbidden_files:
+        return f"Error: Editing critical system files ({os.path.basename(real_target)}) is forbidden to prevent server crash."
+        
     try:
-        os.makedirs(os.path.dirname(target_path), exist_ok=True)
-        with open(target_path, "w", encoding="utf-8") as f:
+        os.makedirs(os.path.dirname(real_target), exist_ok=True)
+        with open(real_target, "w", encoding="utf-8") as f:
             f.write(content)
-        return f"Success: File '{file_path}' written successfully at: {target_path}."
+        return f"Success: File '{file_path}' written successfully inside workspace."
     except Exception as e:
         return f"Error writing file: {str(e)}"
 
