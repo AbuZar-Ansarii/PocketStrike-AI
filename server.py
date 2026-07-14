@@ -922,6 +922,8 @@ def run_adb_command(cmd_str):
     try:
         import subprocess
         import shutil
+        import os
+        import glob
         
         # Check if rish (Shizuku's Termux shell interface) is installed and available
         rish_path = shutil.which("rish")
@@ -936,15 +938,20 @@ def run_adb_command(cmd_str):
                 try:
                     termux_bin = "/data/data/com.termux/files/usr/bin"
                     if os.path.exists(termux_bin):
-                        # Copy main executable
-                        shutil.copy(shizuku_src, os.path.join(termux_bin, "rish"))
-                        # Copy helper script if exists
-                        shizuku_src_sh = shizuku_src + "_sh"
-                        if os.path.exists(shizuku_src_sh):
-                            shutil.copy(shizuku_src_sh, os.path.join(termux_bin, "rish_sh"))
+                        # Copy all files matching rish* (including dex loader)
+                        src_dir = os.path.dirname(shizuku_src)
+                        for fpath in glob.glob(os.path.join(src_dir, "rish*")):
+                            dest_file = os.path.join(termux_bin, os.path.basename(fpath))
+                            shutil.copy(fpath, dest_file)
+                            
                         # Grant execution permissions
                         os.chmod(os.path.join(termux_bin, "rish"), 0o755)
-                        os.chmod(os.path.join(termux_bin, "rish_sh"), 0o755)
+                        
+                        # dex loader MUST be read-only (chmod 444) for Shizuku security
+                        dex_file = os.path.join(termux_bin, "rish_shizuku.dex")
+                        if os.path.exists(dex_file):
+                            os.chmod(dex_file, 0o444)
+                            
                         rish_path = os.path.join(termux_bin, "rish")
                         print("PocketstrikeAI: Auto-installed Shizuku rish binaries successfully!")
                 except Exception as e:
@@ -953,10 +960,19 @@ def run_adb_command(cmd_str):
         use_shizuku = rish_path is not None
         
         if use_shizuku:
+            # Set application environment ID required by Shizuku binder API
+            env = os.environ.copy()
+            env["RISH_APPLICATION_ID"] = "com.termux"
+            
             # Route ADB shell commands directly through Shizuku Binder API
             if cmd_str.startswith("shell "):
                 shell_cmd = cmd_str[6:] # Strip "shell "
-                res = subprocess.run(["rish", "-c", shell_cmd], capture_output=True, text=True, timeout=15)
+                
+                # Check if it's the screenshot stream
+                if shell_cmd == "screencap -p":
+                    return True, "STDOUT_STREAMING_ACTIVE"
+                    
+                res = subprocess.run(["sh", rish_path, "-c", shell_cmd], capture_output=True, text=True, timeout=15, env=env)
                 if res.returncode == 0:
                     return True, res.stdout
                 return False, res.stderr
@@ -969,17 +985,13 @@ def run_adb_command(cmd_str):
                 if len(parts) >= 3:
                     src = parts[1]
                     dest = parts[2]
-                    if src.startswith("/sdcard/"):
-                        # Translate /sdcard/ to local Termux storage mount
-                        shared_base = os.path.expanduser("~/storage/shared/")
-                        rel_path = src[8:] # Strip "/sdcard/"
-                        actual_src = os.path.join(shared_base, rel_path)
-                        if os.path.exists(actual_src):
-                            try:
-                                shutil.copy(actual_src, dest)
-                                return True, "Pulled via Shizuku shared storage"
-                            except Exception as e:
-                                return False, f"Shizuku copy error: {e}"
+                    try:
+                        # Copy via local Shizuku cat transfer
+                        with open(dest, "wb") as f:
+                            subprocess.run(["sh", rish_path, "-c", f"cat {src}"], stdout=f, env=env, timeout=15)
+                        return True, "Pulled via Shizuku shell cat"
+                    except Exception as e:
+                        return False, f"Shizuku cat transfer error: {e}"
                                 
         # Standard ADB runner fallback
         res = subprocess.run(f"adb {cmd_str}", shell=True, capture_output=True, text=True, timeout=15)
@@ -990,17 +1002,38 @@ def run_adb_command(cmd_str):
         return False, str(e)
 
 def take_screenshot():
-    # 1. Verify ADB connection state
-    ok, out = run_adb_command("devices")
-    if not ok or len([line for line in out.strip().split("\n") if "device" in line and not "devices" in line]) == 0:
-        return "Error: Local ADB is not connected. Enable 'Wireless Debugging' in Android Developer Options, connect Termux locally (e.g. run 'adb connect localhost:5555' in terminal), and try again."
-        
     target_name = "captured_screenshot.png"
     target_path = os.path.join(WORKSPACE_DIR, target_name)
     
     if os.path.exists(target_path):
         try: os.remove(target_path)
         except Exception: pass
+        
+    # Check if Shizuku is set up
+    import shutil
+    use_shizuku = shutil.which("rish") is not None or os.path.exists("/sdcard/Shizuku/rish") or os.path.exists(os.path.expanduser("~/storage/shared/Shizuku/rish"))
+    
+    if use_shizuku:
+        # Trigger auto-provisioning
+        run_adb_command("devices")
+        rish_path = shutil.which("rish") or "/data/data/com.termux/files/usr/bin/rish"
+        
+        env = os.environ.copy()
+        env["RISH_APPLICATION_ID"] = "com.termux"
+        
+        try:
+            with open(target_path, "wb") as f:
+                res = subprocess.run(["sh", rish_path, "-c", "screencap -p"], stdout=f, env=env, timeout=20)
+            if res.returncode == 0 and os.path.exists(target_path) and os.path.getsize(target_path) > 0:
+                return f"Success: Screenshot captured via Shizuku. Saved to workspace as '{target_name}'. Path: {target_path}."
+        except Exception as e:
+            # Fallback to standard ADB below if rish failed
+            pass
+            
+    # Verify standard ADB connection state fallback
+    ok, out = run_adb_command("devices")
+    if not ok or len([line for line in out.strip().split("\n") if "device" in line and not "devices" in line]) == 0:
+        return "Error: Neither Shizuku nor Local ADB is connected. Enable 'Wireless Debugging' in Android Developer Options, connect Termux locally (e.g. run 'adb connect localhost:5555' or authorize Shizuku via rish), and try again."
         
     # 2. Capture screenshot on phone storage
     ok, out = run_adb_command("shell screencap -p /sdcard/screenshot.png")
