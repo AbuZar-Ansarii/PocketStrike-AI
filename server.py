@@ -75,11 +75,38 @@ def get_android_workspace():
 WORKSPACE_DIR = get_android_workspace()
 
 def get_system_prompt():
+    # Read persistent memory
+    memory_content = "No facts stored yet."
+    memory_path = os.path.join(WORKSPACE_DIR, "memory.json")
+    if os.path.exists(memory_path):
+        try:
+            with open(memory_path, "r", encoding="utf-8") as f:
+                memory_content = f.read().strip()
+        except Exception:
+            pass
+            
+    # Read learned instructions
+    instructions_content = "No custom instructions saved yet."
+    instructions_path = os.path.join(WORKSPACE_DIR, "instructions.txt")
+    if os.path.exists(instructions_path):
+        try:
+            with open(instructions_path, "r", encoding="utf-8") as f:
+                instructions_content = f.read().strip()
+        except Exception:
+            pass
+
     return f"""You are PKST AI, a powerful local security and system assistant running in Termux on the user's Android phone.
-You have access to local tools that can inspect system state, perform network scans, and read/write files.
+You are a self-evolving AI agent: you can grow, learn, and expand your capabilities over time by writing scripts, learning new rules, and persisting your memory.
+
 Your workspace directory is: {WORKSPACE_DIR} (which is located in the phone's internal storage).
-All file tools (list_directory, read_file_content, write_file_content) resolve relative paths inside this workspace directory. Always write/save files requested by the user inside this workspace folder.
+All file tools (list_directory, read_file_content, write_file_content, run_python_script) resolve relative paths inside this workspace directory. Always write/save files requested by the user inside this workspace folder.
 Critical: You are forbidden from modifying, writing, or deleting files outside this workspace directory, especially the server's own scripts (server.py, setup.py, launch.sh, etc.) to prevent messing with your own running code.
+
+AI PERSISTENT MEMORY (Use write_file_content to update 'memory.json' to store facts, user preferences, configurations, or network details):
+{memory_content}
+
+AI SELF-EVOLUTION INSTRUCTIONS (Use write_file_content to update 'instructions.txt' to add new behavioral rules or instructions for yourself):
+{instructions_content}
 
 If you need to use a tool to answer the user's request, you must respond with EXACTLY this trigger format and nothing else in that turn:
 [TOOL_CALL: tool_name(arg1="value", arg2="value")]
@@ -94,7 +121,9 @@ Available Tools:
 4. read_file_content(file_path)
    Reads the content of a text file inside your workspace directory.
 5. write_file_content(file_path, content)
-   Creates or overwrites a file inside your workspace directory. Useful for saving Python scripts or files.
+   Creates or overwrites a file inside your workspace directory. Useful for saving Python scripts or files (like 'memory.json' and 'instructions.txt').
+6. run_python_script(script_name, args=[...])
+   Runs a Python script written by you inside your workspace directory and returns its output. Use this to run custom scripts, write new tools, or build calculations.
 
 Instructions:
 - When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
@@ -265,6 +294,42 @@ def write_file_content(file_path, content):
     except Exception as e:
         return f"Error writing file: {str(e)}"
 
+def run_python_script(script_name, args=None):
+    if not args:
+        args = []
+    elif isinstance(args, str):
+        try:
+            args = json.loads(args)
+        except Exception:
+            args = [args]
+            
+    # Resolve and sandbox path
+    target_path = os.path.abspath(os.path.join(WORKSPACE_DIR, script_name))
+    real_target = os.path.realpath(target_path)
+    real_workspace = os.path.realpath(WORKSPACE_DIR)
+    
+    if not real_target.startswith(real_workspace):
+        return "Error: Script execution denied. You can only execute scripts inside your workspace."
+        
+    if not os.path.exists(real_target):
+        return f"Error: Script '{script_name}' does not exist. Write it first using write_file_content."
+        
+    try:
+        import subprocess
+        cmd = [sys.executable, real_target] + [str(a) for a in args]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        
+        output = f"Exit Code: {res.returncode}\n"
+        if res.stdout:
+            output += f"Stdout:\n{res.stdout}\n"
+        if res.stderr:
+            output += f"Stderr:\n{res.stderr}\n"
+        return output
+    except subprocess.TimeoutExpired:
+        return "Error: Script execution timed out (limit: 30 seconds)."
+    except Exception as e:
+        return f"Error running script: {str(e)}"
+
 def parse_arguments(arg_str):
     if not arg_str.strip():
         return {}
@@ -329,6 +394,12 @@ def execute_local_tool(name, args_str):
             if not file_path or content is None:
                 return "Error: Missing required arguments 'file_path' and/or 'content'."
             return write_file_content(file_path, content)
+        elif name == "run_python_script":
+            script_name = kwargs.get("script_name")
+            args = kwargs.get("args")
+            if not script_name:
+                return "Error: Missing required argument 'script_name'."
+            return run_python_script(script_name, args)
         else:
             return f"Error: Tool '{name}' is not recognized."
     except Exception as e:
