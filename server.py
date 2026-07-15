@@ -3058,6 +3058,7 @@ def query_remote_mcp_tools(url):
     import urllib.parse
     try:
         headers = {"Accept": "text/event-stream"}
+        # Start SSE request
         res = requests.get(url, headers=headers, stream=True, timeout=8)
         if res.status_code != 200:
             return None, f"SSE endpoint rejected connection (HTTP {res.status_code})"
@@ -3068,13 +3069,13 @@ def query_remote_mcp_tools(url):
             if line_str.startswith("data:"):
                 post_path = line_str.replace("data:", "").strip()
                 break
-        res.close()
-        
+                
         if not post_path:
             post_url = urllib.parse.urljoin(url, "/message")
         else:
             post_url = urllib.parse.urljoin(url, post_path)
             
+        # Keep SSE connection open while POSTing to verify session!
         payload = {
             "jsonrpc": "2.0",
             "method": "tools/list",
@@ -3082,6 +3083,10 @@ def query_remote_mcp_tools(url):
             "id": 1
         }
         resp = requests.post(post_url, json=payload, timeout=8)
+        
+        # Now close the stream
+        res.close()
+        
         if resp.status_code == 200:
             data = resp.json()
             if "result" in data and "tools" in data["result"]:
@@ -3091,9 +3096,29 @@ def query_remote_mcp_tools(url):
     except Exception as e:
         return None, f"Connection failed: {str(e)}"
 
-def call_remote_mcp_tool(post_url, tool_name, arguments):
+def call_remote_mcp_tool(base_url, tool_name, arguments):
     import requests
+    import urllib.parse
     try:
+        # Establish a fresh SSE connection to get an active session ID
+        headers = {"Accept": "text/event-stream"}
+        res = requests.get(base_url, headers=headers, stream=True, timeout=8)
+        if res.status_code != 200:
+            return f"Error: Failed to connect to remote SSE stream (HTTP {res.status_code})"
+            
+        post_path = None
+        for line in res.iter_lines():
+            line_str = line.decode("utf-8").strip()
+            if line_str.startswith("data:"):
+                post_path = line_str.replace("data:", "").strip()
+                break
+                
+        if not post_path:
+            post_url = urllib.parse.urljoin(base_url, "/message")
+        else:
+            post_url = urllib.parse.urljoin(base_url, post_path)
+            
+        # Make the tool execution call while the SSE stream is still open
         payload = {
             "jsonrpc": "2.0",
             "method": "tools/call",
@@ -3103,7 +3128,11 @@ def call_remote_mcp_tool(post_url, tool_name, arguments):
             },
             "id": 2
         }
-        resp = requests.post(post_url, json=payload, timeout=20)
+        resp = requests.post(post_url, json=payload, timeout=25)
+        
+        # Close the stream
+        res.close()
+        
         if resp.status_code == 200:
             data = resp.json()
             if "result" in data and "content" in data["result"]:
@@ -3116,7 +3145,7 @@ def call_remote_mcp_tool(post_url, tool_name, arguments):
             return f"Error: Unexpected response format: {resp.text}"
         return f"Error: Tool execution failed (HTTP {resp.status_code})"
     except Exception as e:
-        return f"Error connecting to remote MCP tool: {str(e)}"
+        return f"Error executing remote MCP tool: {str(e)}"
 
 # Telegram Bot Polling Thread
 def telegram_bot_loop(token):
