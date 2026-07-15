@@ -104,6 +104,32 @@ def get_system_prompt():
     import datetime
     current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S (Day: %A)")
 
+    # 4. Load remote MCP tools
+    mcp_conns = load_mcp_connections()
+    mcp_tool_lines = []
+    tool_counter = 51
+    for conn in mcp_conns:
+        server_name = conn.get("name")
+        for t in conn.get("tools", []):
+            name = t.get("name")
+            desc = t.get("description", "No description provided.")
+            
+            properties = t.get("inputSchema", {}).get("properties", {})
+            req_list = t.get("inputSchema", {}).get("required", [])
+            args_str_list = []
+            for prop_name, prop_val in properties.items():
+                is_req = prop_name in req_list
+                req_badge = "" if is_req else "=None"
+                args_str_list.append(f"{prop_name}{req_badge}")
+                
+            args_repr = ", ".join(args_str_list)
+            mcp_tool_lines.append(f"{tool_counter}. {name}({args_repr})\n    {desc} (Remote MCP: {server_name})")
+            tool_counter += 1
+            
+    mcp_tools_block = ""
+    if mcp_tool_lines:
+        mcp_tools_block = "\n" + "\n".join(mcp_tool_lines)
+
     return f"""You are PocketStrike AI, a powerful local security and system assistant running in Termux on the user's Android phone.
 Current local time and date: {current_time}
 You are a self-evolving AI agent: you can grow, learn, and expand your capabilities over time by writing scripts, learning new rules, and persisting your memory.
@@ -227,7 +253,7 @@ Available Tools:
 49. audit_website_security(url)
     Inspects a web domain or local server URL for SSL/TLS certificate validity (expiration date, issuer) and evaluates the presence of critical security headers (HSTS, CSP, X-Frame-Options, XSS protection).
 50. search_file_content(query, pattern="*")
-    Searches recursively for a text query inside all files in the workspace (optionally filtered by a glob pattern like '*.py' or '*.txt'). Returns matching line numbers and contents.
+    Searches recursively for a text query inside all files in the workspace (optionally filtered by a glob pattern like '*.py' or '*.txt'). Returns matching line numbers and contents.{mcp_tools_block}
 
 Instructions:
 - When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
@@ -2592,7 +2618,18 @@ def execute_local_tool(name, args_str):
                 return "Error: Missing required argument 'query'."
             return search_file_content(query, pattern)
         else:
-            return f"Error: Tool '{name}' is not recognized."
+            # Check if it's a remote MCP tool
+            mcp_conns = load_mcp_connections()
+            mcp_tools_map = {}
+            for conn in mcp_conns:
+                post_url = conn.get("post_url")
+                for t in conn.get("tools", []):
+                    mcp_tools_map[t.get("name")] = post_url
+                    
+            if name in mcp_tools_map:
+                return call_remote_mcp_tool(mcp_tools_map[name], name, kwargs)
+            else:
+                return f"Error: Tool '{name}' is not recognized."
     except Exception as e:
         return f"Error executing tool: {str(e)}"
 
@@ -2997,6 +3034,90 @@ def get_registered_telegram_chats():
             pass
     return []
 
+def load_mcp_connections():
+    mcp_file = os.path.join(WORKSPACE_DIR, "mcp_connections.json")
+    if os.path.exists(mcp_file):
+        try:
+            with open(mcp_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
+def save_mcp_connections(conns):
+    mcp_file = os.path.join(WORKSPACE_DIR, "mcp_connections.json")
+    try:
+        os.makedirs(os.path.dirname(mcp_file), exist_ok=True)
+        with open(mcp_file, "w", encoding="utf-8") as f:
+            json.dump(conns, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"Error saving MCP connections: {e}")
+
+def query_remote_mcp_tools(url):
+    import requests
+    import urllib.parse
+    try:
+        headers = {"Accept": "text/event-stream"}
+        res = requests.get(url, headers=headers, stream=True, timeout=8)
+        if res.status_code != 200:
+            return None, f"SSE endpoint rejected connection (HTTP {res.status_code})"
+            
+        post_path = None
+        for line in res.iter_lines():
+            line_str = line.decode("utf-8").strip()
+            if line_str.startswith("data:"):
+                post_path = line_str.replace("data:", "").strip()
+                break
+        res.close()
+        
+        if not post_path:
+            post_url = urllib.parse.urljoin(url, "/message")
+        else:
+            post_url = urllib.parse.urljoin(url, post_path)
+            
+        payload = {
+            "jsonrpc": "2.0",
+            "method": "tools/list",
+            "params": {},
+            "id": 1
+        }
+        resp = requests.post(post_url, json=payload, timeout=8)
+        if resp.status_code == 200:
+            data = resp.json()
+            if "result" in data and "tools" in data["result"]:
+                return data["result"]["tools"], post_url
+            return None, "Server did not return a valid list of tools."
+        return None, f"Failed querying tools (HTTP {resp.status_code})"
+    except Exception as e:
+        return None, f"Connection failed: {str(e)}"
+
+def call_remote_mcp_tool(post_url, tool_name, arguments):
+    import requests
+    try:
+        payload = {
+            "jsonrpc": "2.0",
+            "method": "tools/call",
+            "params": {
+                "name": tool_name,
+                "arguments": arguments
+            },
+            "id": 2
+        }
+        resp = requests.post(post_url, json=payload, timeout=20)
+        if resp.status_code == 200:
+            data = resp.json()
+            if "result" in data and "content" in data["result"]:
+                contents = data["result"]["content"]
+                text_outputs = []
+                for c in contents:
+                    if c.get("type") == "text":
+                        text_outputs.append(c.get("text", ""))
+                return "\n".join(text_outputs)
+            return f"Error: Unexpected response format: {resp.text}"
+        return f"Error: Tool execution failed (HTTP {resp.status_code})"
+    except Exception as e:
+        return f"Error connecting to remote MCP tool: {str(e)}"
+
 # Telegram Bot Polling Thread
 def telegram_bot_loop(token):
     offset = 0
@@ -3114,6 +3235,54 @@ def send_telegram_photo(token, chat_id, photo_path, caption=None):
         return False
 
 # Web Server Routes
+@app.route('/api/mcp/list', methods=['GET'])
+def list_mcp_servers():
+    return jsonify(load_mcp_connections())
+
+@app.route('/api/mcp/add', methods=['POST'])
+def add_mcp_server():
+    data = request.json or {}
+    name = data.get("name", "").strip().lower()
+    url = data.get("url", "").strip()
+    
+    if not name or not url:
+        return jsonify({"error": "Missing required fields 'name' and/or 'url'."}), 400
+        
+    conns = load_mcp_connections()
+    if any(c.get("name") == name for c in conns):
+        return jsonify({"error": f"An MCP connection with name '{name}' already exists."}), 400
+        
+    tools, post_url = query_remote_mcp_tools(url)
+    if not tools:
+        return jsonify({"error": f"Failed to connect to remote MCP server. Verify URL is correct and server is running."}), 400
+        
+    new_conn = {
+        "name": name,
+        "url": url,
+        "post_url": post_url,
+        "status": "connected",
+        "tools": tools
+    }
+    conns.append(new_conn)
+    save_mcp_connections(conns)
+    return jsonify({"status": "success", "tools_count": len(tools)})
+
+@app.route('/api/mcp/remove', methods=['POST'])
+def remove_mcp_server():
+    data = request.json or {}
+    name = data.get("name", "").strip().lower()
+    if not name:
+        return jsonify({"error": "Missing required field 'name'."}), 400
+        
+    conns = load_mcp_connections()
+    filtered = [c for c in conns if c.get("name") != name]
+    
+    if len(filtered) == len(conns):
+        return jsonify({"error": f"MCP connection '{name}' not found."}), 404
+        
+    save_mcp_connections(filtered)
+    return jsonify({"status": "success"})
+
 @app.route('/api/history/load', methods=['GET'])
 def load_history():
     messages = load_unified_history()

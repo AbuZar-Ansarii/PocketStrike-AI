@@ -22,12 +22,22 @@ const statusTelegram = document.getElementById('statusTelegram');
 const themeToggleBtn = document.getElementById('themeToggleBtn');
 const themeIcon = document.getElementById('themeIcon');
 
+// MCP DOM Elements
+const mcpModal = document.getElementById('mcpModal');
+const addMcpBtn = document.getElementById('addMcpBtn');
+const mcpCancelBtn = document.getElementById('mcpCancelBtn');
+const mcpSubmitBtn = document.getElementById('mcpSubmitBtn');
+const mcpName = document.getElementById('mcpName');
+const mcpUrl = document.getElementById('mcpUrl');
+const sidebarMcpList = document.getElementById('sidebarMcpList');
+
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
     initTheme();
     loadConversations();
     initEventListeners();
     fetchBackendStatus();
+    loadMcpConnections();
     renderAll();
 });
 
@@ -65,6 +75,16 @@ function initEventListeners() {
 
     // Send Button Click
     sendBtn.addEventListener('click', handleSend);
+
+    // MCP Modal Toggles
+    if (addMcpBtn) addMcpBtn.addEventListener('click', openMcpModal);
+    if (mcpCancelBtn) mcpCancelBtn.addEventListener('click', closeMcpModal);
+    if (mcpSubmitBtn) mcpSubmitBtn.addEventListener('click', handleAddMcp);
+    
+    // Close modal on background click
+    window.addEventListener('click', (e) => {
+        if (e.target === mcpModal) closeMcpModal();
+    });
 }
 
 // Initialize Theme from LocalStorage or default to dark
@@ -717,3 +737,117 @@ async function pollHistoryChanges() {
 }
 // Run poll every 8 seconds
 setInterval(pollHistoryChanges, 8000);
+
+// Open/Close MCP Modal
+function openMcpModal() {
+    mcpName.value = "";
+    mcpUrl.value = "";
+    mcpModal.classList.add('show');
+}
+
+function closeMcpModal() {
+    mcpModal.classList.remove('show');
+}
+
+// Load and render MCP connections
+async function loadMcpConnections() {
+    try {
+        const response = await fetch('/api/mcp/list');
+        if (response.ok) {
+            const servers = await response.json();
+            renderMcpList(servers);
+        }
+    } catch (err) {
+        console.error("Error loading MCP connections:", err);
+    }
+}
+
+// Render the MCP connections list in the sidebar
+function renderMcpList(servers) {
+    if (!sidebarMcpList) return;
+    
+    if (servers.length === 0) {
+        sidebarMcpList.innerHTML = `
+            <div style="font-size: 0.8rem; color: var(--text-muted); padding: 0.5rem 0.25rem;">
+                No remote servers connected.
+            </div>
+        `;
+        return;
+    }
+    
+    sidebarMcpList.innerHTML = servers.map(srv => `
+        <div class="mcp-item">
+            <div class="mcp-item-info">
+                <span class="mcp-status-dot ${srv.status === 'connected' ? 'connected' : 'offline'}" title="Status: ${srv.status}"></span>
+                <span style="font-weight: 500;">${srv.name}</span>
+            </div>
+            <button class="mcp-delete-btn" onclick="handleRemoveMcp('${srv.name}')" title="Disconnect server">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+            </button>
+        </div>
+    `).join('');
+}
+
+// Add new MCP connection
+async function handleAddMcp() {
+    const name = mcpName.value.trim();
+    const url = mcpUrl.value.trim();
+    
+    if (!name || !url) {
+        alert("Please enter both a name and server URL.");
+        return;
+    }
+    
+    mcpSubmitBtn.disabled = true;
+    mcpSubmitBtn.innerText = "Connecting...";
+    
+    try {
+        const response = await fetch('/api/mcp/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, url })
+        });
+        
+        const result = await response.json();
+        if (response.ok) {
+            closeMcpModal();
+            loadMcpConnections();
+            alert(`Successfully connected to '${name}'! Loaded ${result.tools_count} remote tools.`);
+            fetchBackendStatus();
+        } else {
+            alert("Connection error: " + (result.error || "Unknown error"));
+        }
+    } catch (err) {
+        alert("Network error: Failed to reach backend.");
+        console.error(err);
+    } finally {
+        mcpSubmitBtn.disabled = false;
+        mcpSubmitBtn.innerText = "Connect";
+    }
+}
+
+// Remove MCP connection
+async function handleRemoveMcp(name) {
+    if (!confirm(`Are you sure you want to disconnect remote server '${name}'?`)) return;
+    
+    try {
+        const response = await fetch('/api/mcp/remove', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name })
+        });
+        
+        if (response.ok) {
+            loadMcpConnections();
+            fetchBackendStatus();
+        } else {
+            const err = await response.json();
+            alert("Error removing server: " + (err.error || "Unknown error"));
+        }
+    } catch (err) {
+        console.error("Error removing MCP:", err);
+    }
+}

@@ -57,6 +57,17 @@
                 </div>
             </div>
 
+            <!-- MCP Connections Section -->
+            <div class="sidebar-mcp-container">
+                <div class="mcp-header-row">
+                    <span class="history-label">MCP Connections</span>
+                    <button class="add-mcp-btn" id="addMcpBtn" title="Connect Remote MCP Server">+</button>
+                </div>
+                <div class="sidebar-mcp-list" id="sidebarMcpList">
+                    <!-- MCP Connections injected via JS -->
+                </div>
+            </div>
+
             <!-- Sidebar Footer Status -->
             <div class="sidebar-footer" id="sidebarFooter">
                 <div class="status-card">
@@ -180,6 +191,26 @@
 
     <!-- Overlay for mobile sidebar -->
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- Add MCP Connection Modal -->
+    <div class="modal-backdrop" id="mcpModal">
+        <div class="modal-content">
+            <h2>Connect Remote MCP Server</h2>
+            <p class="modal-subtext">Integrate remote tools into your AI using Server-Sent Events (SSE).</p>
+            <div class="form-group">
+                <label for="mcpName">Server Name</label>
+                <input type="text" id="mcpName" placeholder="e.g. cloud-database" required>
+            </div>
+            <div class="form-group">
+                <label for="mcpUrl">SSE Endpoint URL</label>
+                <input type="url" id="mcpUrl" placeholder="e.g. http://192.168.1.50:8000/sse" required>
+            </div>
+            <div class="modal-actions">
+                <button class="modal-cancel-btn" id="mcpCancelBtn">Cancel</button>
+                <button class="modal-submit-btn" id="mcpSubmitBtn">Connect</button>
+            </div>
+        </div>
+    </div>
 
     <script src="/static/script.js"></script>
 </body>
