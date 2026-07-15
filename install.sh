@@ -15,13 +15,22 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 clear
-echo -e "${CYAN}==================================================${NC}"
-echo -e "${GREEN}          PocketstrikeAI Installer                ${NC}"
-echo -e "${CYAN}==================================================${NC}"
-echo -e "Starting installation for Termux on Android...\n"
+echo -e "${CYAN}=======================================================${NC}"
+echo -e "${CYAN}  _____            _        _    _____ _        _ _     ${NC}"
+echo -e "${CYAN} |  __ \\          | |      | |  / ____| |      (_) |    ${NC}"
+echo -e "${CYAN} | |__) |__   ___ | | _____| |_| (___ | |_ _ __ _| | ___ ${NC}"
+echo -e "${CYAN} |  ___/ _ \\ / __|| |/ / _ \\ __|\\___ \\| __| '__| | |/ / ${NC}"
+echo -e "${CYAN} | |  | (_) | (__ |   <  __/ |_ ____) | |_| |  | |   <  ${NC}"
+echo -e "${CYAN} |_|   \\___/ \\___||_|\\_\\___|\\__|_____/ \\__|_|  |_|_|\\_\\${NC}"
+echo -e "${CYAN}=======================================================${NC}"
+echo -e "${GREEN}             💥 POCKETSTRIKE AI INITIALIZER 💥          ${NC}"
+echo -e "${CYAN}=======================================================${NC}"
+echo -e "🚀 Starting high-performance on-device deployment..."
+echo -e "📱 Environment: Termux on Android"
+echo -e "${CYAN}-------------------------------------------------------${NC}\n"
 
 # 1. Update package lists
-echo -e "${BLUE}[1/4] Updating package repositories...${NC}"
+echo -e "${BLUE}⚡ [1/4] Syncing Termux package mirrors...${NC}"
 if [ -x "$(command -v pkg)" ]; then
     pkg update -y || echo -e "${YELLOW}Warning: pkg update failed, trying to proceed...${NC}"
 else
@@ -30,14 +39,14 @@ else
 fi
 
 # 2. Install required system and network tools
-echo -e "\n${BLUE}[2/4] Installing required system and network tools...${NC}"
+echo -e "\n${BLUE}⚡ [2/4] Deploying mobile audit toolchain & dependencies...${NC}"
 pkg install -y python git termux-api android-tools nmap dnsutils curl net-tools iproute2 traceroute || {
     echo -e "${RED}Error: Failed to install required system packages. Please check your internet connection or Termux repositories.${NC}"
     exit 1
 }
 
 # Setup storage access and create workspace directory
-echo -e "\n${BLUE}Configuring Android storage permission...${NC}"
+echo -e "\n${BLUE}🔐 Granting local storage permissions...${NC}"
 termux-setup-storage || echo -e "${YELLOW}Warning: termux-setup-storage failed (not running on Termux?), proceeding anyway...${NC}"
 mkdir -p ~/storage/shared/PocketStrike-AI || echo -e "${YELLOW}Warning: Could not create shared storage folder, proceeding...${NC}"
 
@@ -51,11 +60,11 @@ if [ ! -f "launch.sh" ]; then
 fi
 
 # 4. Install Flask and Requests
-echo -e "\n${BLUE}[3/4] Installing Python dependencies (Flask, Requests)...${NC}"
+echo -e "\n${BLUE}⚡ [3/4] Installing Python dependency layers...${NC}"
 pip install flask requests
 
 # 5. Make scripts executable
-echo -e "\n${BLUE}[4/4] Setting execution permissions...${NC}"
+echo -e "\n${BLUE}⚡ [4/4] Setting execution system permissions...${NC}"
 if [ -f "launch.sh" ]; then
     chmod +x launch.sh
     chmod +x setup.py
@@ -65,13 +74,13 @@ else
     exit 1
 fi
 
-echo -e "\n${GREEN}==================================================${NC}"
-echo -e "${GREEN}      Installation Completed Successfully!        ${NC}"
-echo -e "${CYAN}==================================================${NC}"
-echo -e "You can now start the setup wizard and launch the AI."
+echo -e "\n${GREEN}=======================================================${NC}"
+echo -e "${GREEN}      ✨ POCKETSTRIKE AI DEPLOYED SUCCESSFULLY! ✨      ${NC}"
+echo -e "${CYAN}=======================================================${NC}"
+echo -e "You can now initialize the setup wizard and launch the AI."
 if [ "$CLONED" = true ]; then
-    echo -e "To start, run: ${YELLOW}cd PocketStrike-AI && ./launch.sh${NC}"
+    echo -e "To launch, run: ${YELLOW}cd PocketStrike-AI && ./launch.sh${NC}"
 else
-    echo -e "To start, run: ${YELLOW}./launch.sh${NC}"
+    echo -e "To launch, run: ${YELLOW}./launch.sh${NC}"
 fi
-echo -e "${CYAN}==================================================${NC}"
+echo -e "${CYAN}=======================================================${NC}"
