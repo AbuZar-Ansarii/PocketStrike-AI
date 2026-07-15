@@ -3698,12 +3698,12 @@ if __name__ == '__main__':
     white_color = "\033[38;5;255m"
     green_color = "\033[38;5;46m"
     reset_color = "\033[0m"
-    banner_text = f"""{orange_color}██████╗ ██╗  ██╗███████╗████████╗    █████╗ ██╗
-██╔══██╗██║ ██╔╝██╔════╝╚══██╔══╝   ██╔══██╗██║
-{white_color}██████╔╝█████╔╝ ███████╗   ██║      ███████║██║
-██╔═══╝ ██╔═██╗ ╚════██║   ██║      ██╔══██║██║
-{green_color}██║     ██║  ██╗███████║   ██║      ██║  ██║██║
-╚═╝     ╚═╝  ╚═╝╚══════╝   ╚═╝      ╚═╝  ╚═╝╚═╝{reset_color}"""
+    banner_text = f"""{orange_color}██████╗ ██████╗ ███████╗████████╗        █████╗  ██╗
+██╔══██╗██╔════╝██╔════╝╚══██╔══╝        ██╔══██╗██║
+{white_color}██████╔╝██║     ███████╗   ██║   ███████╗███████║██║
+██╔═══╝ ██║     ╚════██║   ██║   ╚══════╝██╔══██║██║
+{green_color}██║     ╚██████╗███████║   ██║           ██║  ██║██║
+╚═╝      ╚═════╝╚══════╝   ╚═╝           ╚═╝  ╚═╝╚═╝{reset_color}"""
     print(banner_text)
     print(f"       {orange_color}Pocket{white_color}Strike{green_color}-AI {reset_color}— {orange_color}Gateway{reset_color}")
     print(f"{green_color}───────────────────────── Server is Starting ─────────────────────────{reset_color}")
