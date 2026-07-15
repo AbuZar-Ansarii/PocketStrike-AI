@@ -2569,7 +2569,10 @@ def execute_local_tool(name, args_str):
         return f"Error executing tool: {str(e)}"
 
 def get_ai_response_with_tools(messages):
-    # Ensure the system prompt containing all 28 ReAct tools and capabilities is always active
+    # Keep the full history on disk, but send only a rolling window of the last 60 messages to the API
+    if len(messages) > 60:
+        messages = [messages[0]] + messages[-59:]
+        
     system_index = -1
     for idx, msg in enumerate(messages):
         if msg["role"] == "system":
@@ -2735,7 +2738,10 @@ def call_ai_api_stream(messages):
         yield f"Stream Request Error: {str(e)}"
 
 def get_ai_response_stream(messages):
-    # Ensure the system prompt containing all 28 ReAct tools and capabilities is always active
+    # Keep the full history in the web browser, but send only a rolling window of the last 60 messages to the API
+    if len(messages) > 60:
+        messages = [messages[0]] + messages[-59:]
+        
     system_index = -1
     for idx, msg in enumerate(messages):
         if msg["role"] == "system":
@@ -2988,10 +2994,9 @@ def telegram_bot_loop(token):
                 # Append user prompt
                 sessions[chat_id].append({"role": "user", "content": text})
                 
-                # Limit message history to prevent token overflow (keep last 15 messages)
-                if len(sessions[chat_id]) > 15:
-                    # Keep system prompt at index 0, then slice the last 14 messages
-                    sessions[chat_id] = [sessions[chat_id][0]] + sessions[chat_id][-14:]
+                # Keep the full history log, but slide the API context at 60 messages to prevent token limits
+                if len(sessions[chat_id]) > 60:
+                    sessions[chat_id] = [sessions[chat_id][0]] + sessions[chat_id][-59:]
 
                 # Send typing status
                 requests.post(f"https://api.telegram.org/bot{token}/sendChatAction", json={"chat_id": chat_id, "action": "typing"})
