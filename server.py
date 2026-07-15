@@ -210,6 +210,12 @@ Available Tools:
     Reads real-time data from phone hardware sensors. If sensor_name is omitted, lists all available sensors. If sensor_name is specified (e.g., 'Gravity', 'Light'), reads the sensor's current data values once. (runs via local Termux-API).
 43. dump_ui_layout()
     Dumps the current screen's XML UI layout, parses it, and returns a clean, token-efficient list of all visible text elements, buttons, and input fields, along with their screen center coordinates. Use this to locate buttons or inputs on screen when automating app usage. (runs via local ADB or Shizuku shell).
+44. add_scheduled_task(task_type, trigger, description, target="telegram")
+    Schedules a reminder or a recurring task. task_type is either 'reminder' (one-shot alert) or 'cron' (recurring task). trigger is an offset ('10m', '2h', '1d', or specific time '18:30') for reminders, or an interval ('5m', '1h', '1d') for crons. description is the message or task content. target is 'telegram', 'system', or 'both'. (runs via local background thread).
+45. list_scheduled_tasks()
+    Lists all active, pending, or recurring tasks/crons.
+46. remove_scheduled_task(task_id)
+    Removes a scheduled task/cron by its unique ID.
 
 Instructions:
 - When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
@@ -1718,6 +1724,230 @@ def read_phone_sensors(sensor_name=""):
     except Exception as e:
         return f"Error executing sensor reader: {str(e)}"
 
+def scheduler_worker_loop():
+    import time
+    import datetime
+    
+    schedules_file = os.path.join(WORKSPACE_DIR, "schedules.json")
+    print("PocketstrikeAI Scheduler Thread started...")
+    
+    while True:
+        # Sleep for 15 seconds between ticks
+        time.sleep(15)
+        
+        if not os.path.exists(schedules_file):
+            continue
+            
+        try:
+            with open(schedules_file, "r") as f:
+                tasks = json.load(f)
+        except Exception:
+            continue
+            
+        now = time.time()
+        modified = False
+        token = config.get("telegram_token")
+        
+        for task in tasks:
+            if task.get("status") != "pending":
+                continue
+                
+            trigger_time = task.get("trigger_time")
+            task_type = task.get("type", "reminder")
+            
+            # For one-shot reminders
+            if task_type == "reminder":
+                if now >= trigger_time:
+                    execute_scheduled_action(task, token)
+                    task["status"] = "completed"
+                    task["fired_at"] = now
+                    modified = True
+                    
+            # For recurring cron jobs
+            elif task_type == "cron":
+                last_run = task.get("last_run", 0)
+                interval = task.get("interval_seconds", 0)
+                
+                if interval > 0 and (now - last_run) >= interval:
+                    execute_scheduled_action(task, token)
+                    task["last_run"] = now
+                    modified = True
+                    
+        if modified:
+            try:
+                with open(schedules_file, "w") as f:
+                    json.dump(tasks, f, indent=2)
+            except Exception as e:
+                print(f"Error saving schedules: {e}")
+
+def execute_scheduled_action(task, token):
+    desc = task.get("description", "Scheduled Reminder")
+    target = task.get("target", "system")
+    
+    msg = f"🔔 **PocketstrikeAI Alert** 🔔\n\nTask: {desc}"
+    
+    if target == "system" or target == "both":
+        send_android_notification("PocketstrikeAI Alert", desc)
+        vibrate_device(800)
+        speak_text(f"Notification: {desc}")
+        
+    if (target == "telegram" or target == "both") and token:
+        sessions = load_telegram_sessions()
+        for cid in sessions.keys():
+            send_telegram_msg(token, cid, msg)
+
+def parse_time_offset(trigger_str):
+    import datetime
+    import re
+    now = datetime.datetime.now()
+    
+    match = re.match(r'^(\d+)([mhdw])$', trigger_str.strip().lower())
+    if match:
+        amount = int(match.group(1))
+        unit = match.group(2)
+        if unit == 'm':
+            delta = datetime.timedelta(minutes=amount)
+        elif unit == 'h':
+            delta = datetime.timedelta(hours=amount)
+        elif unit == 'd':
+            delta = datetime.timedelta(days=amount)
+        elif unit == 'w':
+            delta = datetime.timedelta(weeks=amount)
+        return (now + delta).timestamp()
+        
+    match_abs = re.match(r'^(\d{1,2}):(\d{2})$', trigger_str.strip())
+    if match_abs:
+        hour = int(match_abs.group(1))
+        minute = int(match_abs.group(2))
+        target_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if target_time < now:
+            target_time += datetime.timedelta(days=1)
+        return target_time.timestamp()
+        
+    return None
+
+def add_scheduled_task(task_type, trigger, description, target="telegram"):
+    try:
+        import time
+        schedules_file = os.path.join(WORKSPACE_DIR, "schedules.json")
+        
+        tasks = []
+        if os.path.exists(schedules_file):
+            try:
+                with open(schedules_file, "r", encoding="utf-8") as f:
+                    tasks = json.load(f)
+            except Exception:
+                pass
+                
+        task_id = f"task_{int(time.time())}"
+        task_type = task_type.strip().lower()
+        target = target.strip().lower()
+        
+        if task_type not in ["reminder", "cron"]:
+            return "Error: task_type must be either 'reminder' or 'cron'."
+            
+        if target not in ["telegram", "system", "both"]:
+            return "Error: target must be 'telegram', 'system', or 'both'."
+            
+        new_task = {
+            "id": task_id,
+            "type": task_type,
+            "description": description,
+            "target": target,
+            "status": "pending",
+            "created_at": time.time()
+        }
+        
+        if task_type == "reminder":
+            trigger_time = parse_time_offset(trigger)
+            if not trigger_time:
+                return f"Error: Could not parse reminder time '{trigger}'. Use formats like '10m', '2h', '1d', or '18:30'."
+            new_task["trigger_time"] = trigger_time
+            new_task["trigger_desc"] = trigger
+            
+        elif task_type == "cron":
+            import re
+            match = re.match(r'^(\d+)([mhdw])$', trigger.strip().lower())
+            if not match:
+                return f"Error: Could not parse cron interval '{trigger}'. Use formats like '5m', '1h', or '1d'."
+            amount = int(match.group(1))
+            unit = match.group(2)
+            
+            interval_seconds = 0
+            if unit == 'm':
+                interval_seconds = amount * 60
+            elif unit == 'h':
+                interval_seconds = amount * 3600
+            elif unit == 'd':
+                interval_seconds = amount * 86400
+            elif unit == 'w':
+                interval_seconds = amount * 604800
+                
+            new_task["interval_seconds"] = interval_seconds
+            new_task["interval_desc"] = trigger
+            new_task["last_run"] = time.time()
+            
+        tasks.append(new_task)
+        
+        with open(schedules_file, "w", encoding="utf-8") as f:
+            json.dump(tasks, f, indent=2, ensure_ascii=False)
+            
+        desc_type = "One-shot reminder" if task_type == "reminder" else f"Recurring cron (every {trigger})"
+        return f"Success: Scheduled task '{task_id}' successfully. Type: {desc_type}. Target: {target}."
+        
+    except Exception as e:
+        return f"Error scheduling task: {str(e)}"
+
+def list_scheduled_tasks():
+    try:
+        schedules_file = os.path.join(WORKSPACE_DIR, "schedules.json")
+        if not os.path.exists(schedules_file):
+            return "No scheduled tasks found."
+            
+        with open(schedules_file, "r", encoding="utf-8") as f:
+            tasks = json.load(f)
+            
+        if not tasks:
+            return "No scheduled tasks found."
+            
+        import datetime
+        output = ["=== SCHEDULED TASKS & CRONS ==="]
+        for t in tasks:
+            status_badge = f"[{t.get('status').upper()}]"
+            details = f"ID: {t.get('id')} | {t.get('description')} | Target: {t.get('target')}"
+            
+            if t.get("type") == "reminder":
+                trigger_dt = datetime.datetime.fromtimestamp(t.get("trigger_time")).strftime('%Y-%m-%d %H:%M:%S')
+                output.append(f"{status_badge} Reminder -> Trigger Time: {trigger_dt} ({t.get('trigger_desc')}) | {details}")
+            else:
+                last_dt = datetime.datetime.fromtimestamp(t.get("last_run")).strftime('%Y-%m-%d %H:%M:%S') if t.get("last_run") else "Never"
+                output.append(f"{status_badge} Cron -> Interval: {t.get('interval_desc')} | Last Run: {last_dt} | {details}")
+                
+        return "\n".join(output)
+    except Exception as e:
+        return f"Error listing scheduled tasks: {str(e)}"
+
+def remove_scheduled_task(task_id):
+    try:
+        schedules_file = os.path.join(WORKSPACE_DIR, "schedules.json")
+        if not os.path.exists(schedules_file):
+            return "Error: No scheduled tasks found."
+            
+        with open(schedules_file, "r", encoding="utf-8") as f:
+            tasks = json.load(f)
+            
+        filtered_tasks = [t for t in tasks if t.get("id") != task_id]
+        
+        if len(filtered_tasks) == len(tasks):
+            return f"Error: Task ID '{task_id}' not found."
+            
+        with open(schedules_file, "w", encoding="utf-8") as f:
+            json.dump(filtered_tasks, f, indent=2, ensure_ascii=False)
+            
+        return f"Success: Removed scheduled task '{task_id}'."
+    except Exception as e:
+        return f"Error removing scheduled task: {str(e)}"
+
 def dump_ui_layout():
     try:
         import re
@@ -2042,6 +2272,21 @@ def execute_local_tool(name, args_str):
             return read_phone_sensors(sensor_name)
         elif name == "dump_ui_layout":
             return dump_ui_layout()
+        elif name == "add_scheduled_task":
+            task_type = kwargs.get("task_type")
+            trigger = kwargs.get("trigger")
+            description = kwargs.get("description")
+            target = kwargs.get("target", "telegram")
+            if not task_type or not trigger or not description:
+                return "Error: Missing required arguments."
+            return add_scheduled_task(task_type, trigger, description, target)
+        elif name == "list_scheduled_tasks":
+            return list_scheduled_tasks()
+        elif name == "remove_scheduled_task":
+            task_id = kwargs.get("task_id")
+            if not task_id:
+                return "Error: Missing required argument 'task_id'."
+            return remove_scheduled_task(task_id)
         else:
             return f"Error: Tool '{name}' is not recognized."
     except Exception as e:
@@ -2601,6 +2846,10 @@ if __name__ == '__main__':
     if not load_config():
         print("⚠️ Warning: config.json not found! Please run the Setup Wizard first.")
         print("Starting anyway in fallback mode.")
+        
+    # Start Scheduler Thread
+    scheduler_thread = threading.Thread(target=scheduler_worker_loop, daemon=True)
+    scheduler_thread.start()
     # 2. Launch Telegram Bot if enabled
     telegram_status = "Disabled"
     if config.get("telegram_enabled") and config.get("telegram_token"):
