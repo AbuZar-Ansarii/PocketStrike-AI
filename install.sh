@@ -7,27 +7,25 @@
 set -e
 
 # Define colors for output
-BLUE='\033[0;34m'
+BLUE='\033[38;5;39m' # Vibrant Cyber Blue
+GREEN='\033[38;5;46m' # Bright Green
 CYAN='\033[0;36m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
-PINK='\033[1;35m' # UI Matching Pink/Magenta
 NC='\033[0m' # No Color
 
 clear
-echo -e "${PINK}=======================================================${NC}"
-echo -e "${CYAN}  _____            _        _    _____ _        _ _     ${NC}"
-echo -e "${CYAN} |  __ \\          | |      | |  / ____| |      (_) |    ${NC}"
-echo -e "${CYAN} | |__) |__   ___ | | _____| |_| (___ | |_ _ __ _| | ___ ${NC}"
-echo -e "${CYAN} |  ___/ _ \\ / __|| |/ / _ \\ __|\\___ \\| __| '__| | |/ / ${NC}"
-echo -e "${CYAN} | |  | (_) | (__ |   <  __/ |_ ____) | |_| |  | |   <  ${NC}"
-echo -e "${CYAN} |_|   \\___/ \\___||_|\\_\\___|\\__|_____/ \\__|_|  |_|_|\\_\\${NC}"
-echo -e "${PINK}=======================================================${NC}"
-echo -e "${CYAN}             🤳 POCKETSTRIKE AI INITIALIZER 🤳          ${NC}"
-echo -e "${PINK}=======================================================${NC}"
+echo -e "${BLUE}  _____            _        _    _____ _        _ _     ${NC}"
+echo -e "${BLUE} |  __ \\          | |      | |  / ____| |      (_) |    ${NC}"
+echo -e "${BLUE} | |__) |__   ___ | | _____| |_| (___ | |_ _ __ _| | ___ ${NC}"
+echo -e "${BLUE} |  ___/ _ \\ / __|| |/ / _ \\ __|\\___ \\| __| '__| | |/ / ${NC}"
+echo -e "${BLUE} | |  | (_) | (__ |   <  __/ |_ ____) | |_| |  | |   <  ${NC}"
+echo -e "${BLUE} |_|   \\___/ \\___||_|\\_\\___|\\__|_____/ \\__|_|  |_|_|\\_\\${NC}"
+echo -e "       🤳 ${BLUE}Pocket${GREEN}Strike-AI ${NC}— ${BLUE}Initializer${NC} 🤳"
+echo -e "${GREEN}──────────────────────────────────────────────────────────────────────────${NC}"
 echo -e "🚀 Starting high-performance on-device deployment..."
 echo -e "📱 Environment: Termux on Android"
-echo -e "${PINK}-------------------------------------------------------${NC}\n"
+echo -e "${GREEN}──────────────────────────────────────────────────────────────────────────${NC}\n"
 
 # 1. Update package lists
 echo -e "${BLUE}⚡ [1/4] Syncing Termux package mirrors...${NC}"
@@ -68,19 +66,19 @@ echo -e "\n${BLUE}⚡ [4/4] Setting execution system permissions...${NC}"
 if [ -f "launch.sh" ]; then
     chmod +x launch.sh
     chmod +x setup.py
-    echo -e "${PINK}Scripts are now executable.${NC}"
+    echo -e "${GREEN}Scripts are now executable.${NC}"
 else
     echo -e "${RED}Error: launch.sh still not found after download!${NC}"
     exit 1
 fi
 
-echo -e "\n${PINK}=======================================================${NC}"
-echo -e "${CYAN}      ✨ POCKETSTRIKE AI DEPLOYED SUCCESSFULLY! ✨      ${NC}"
-echo -e "${PINK}=======================================================${NC}"
+echo -e "\n${GREEN}──────────────────────────────────────────────────────────────────────────${NC}"
+echo -e "       ✨ ${BLUE}Pocket${GREEN}Strike-AI ${NC}— ${GREEN}Deployed Successfully!${NC} ✨"
+echo -e "${GREEN}──────────────────────────────────────────────────────────────────────────${NC}"
 echo -e "You can now initialize the setup wizard and launch the AI."
 if [ "$CLONED" = true ]; then
     echo -e "To launch, run: ${YELLOW}cd PocketStrike-AI && ./launch.sh${NC}"
 else
     echo -e "To launch, run: ${YELLOW}./launch.sh${NC}"
 fi
-echo -e "${PINK}=======================================================${NC}"
+echo -e "${GREEN}──────────────────────────────────────────────────────────────────────────${NC}"
