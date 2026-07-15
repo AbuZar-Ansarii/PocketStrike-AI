@@ -208,6 +208,8 @@ Available Tools:
     Performs a geographic lookup of an external IP address, resolving its country, region, city, ISP, and geographic coordinates. Use this to trace the origin of network connections or audit remote IPs.
 42. read_phone_sensors(sensor_name="")
     Reads real-time data from phone hardware sensors. If sensor_name is omitted, lists all available sensors. If sensor_name is specified (e.g., 'Gravity', 'Light'), reads the sensor's current data values once. (runs via local Termux-API).
+43. dump_ui_layout()
+    Dumps the current screen's XML UI layout, parses it, and returns a clean, token-efficient list of all visible text elements, buttons, and input fields, along with their screen center coordinates. Use this to locate buttons or inputs on screen when automating app usage. (runs via local ADB or Shizuku shell).
 
 Instructions:
 - When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
@@ -1716,6 +1718,102 @@ def read_phone_sensors(sensor_name=""):
     except Exception as e:
         return f"Error executing sensor reader: {str(e)}"
 
+def dump_ui_layout():
+    try:
+        import re
+        import os
+        import xml.etree.ElementTree as ET
+        
+        # 1. Run uiautomator dump on the device
+        dump_file_on_device = "/data/local/tmp/window_dump.xml"
+        ok, out = run_adb_command(f"shell uiautomator dump {dump_file_on_device}")
+        if not ok:
+            return f"Error dumping UI layout: {out}"
+            
+        # 2. Cat/Read the XML content from the device
+        ok, xml_content = run_adb_command(f"shell cat {dump_file_on_device}")
+        if not ok or not xml_content.strip():
+            return f"Error reading UI XML: {xml_content}"
+            
+        # Clean up the file on the device
+        run_adb_command(f"shell rm {dump_file_on_device}")
+        
+        # 3. Parse the XML content
+        try:
+            # Android XML dumps sometimes contain null characters or bad encoding; let's sanitize
+            cleaned_xml = re.sub(r'[^\x09\x0A\x0D\x20-\x7E\x80-\xFF]', '', xml_content)
+            root = ET.fromstring(cleaned_xml)
+        except Exception as parse_err:
+            return f"Error parsing UI XML: {parse_err}\nRaw output length: {len(xml_content)}"
+            
+        interactable_elements = []
+        
+        def traverse(node):
+            attrib = node.attrib
+            # Extract attributes
+            text = attrib.get("text", "").strip()
+            content_desc = attrib.get("content-desc", "").strip()
+            resource_id = attrib.get("resource-id", "").strip()
+            class_name = attrib.get("class", "").split(".")[-1] # Short class name e.g. Button
+            bounds = attrib.get("bounds", "")
+            clickable = attrib.get("clickable", "false").lower() == "true"
+            enabled = attrib.get("enabled", "true").lower() == "true"
+            
+            # Check if this node has useful text or is interactable
+            if (text or content_desc or resource_id) and enabled:
+                # Parse bounds [xmin,ymin][xmax,ymax]
+                match = re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]', bounds)
+                if match:
+                    x1, y1, x2, y2 = map(int, match.groups())
+                    x_center = (x1 + x2) // 2
+                    y_center = (y1 + y2) // 2
+                    
+                    element_info = {
+                        "class": class_name,
+                        "center": (x_center, y_center),
+                        "bounds": f"[{x1},{y1}][{x2},{y2}]"
+                    }
+                    if text:
+                        element_info["text"] = text
+                    if content_desc:
+                        element_info["content-desc"] = content_desc
+                    if resource_id:
+                        # Clean resource id: remove package prefix if long
+                        short_id = resource_id.split("/")[-1]
+                        element_info["resource-id"] = short_id
+                    if clickable:
+                        element_info["clickable"] = True
+                        
+                    interactable_elements.append(element_info)
+                    
+            for child in node:
+                traverse(child)
+                
+        traverse(root)
+        
+        # 4. Format output cleanly
+        if not interactable_elements:
+            return "No readable or interactable elements found on the current screen."
+            
+        output = ["=== ACTIVE SCREEN UI ELEMENTS ==="]
+        for idx, el in enumerate(interactable_elements, 1):
+            details = []
+            if "text" in el:
+                details.append(f"Text: \"{el['text']}\"")
+            if "content-desc" in el:
+                details.append(f"Desc: \"{el['content-desc']}\"")
+            if "resource-id" in el:
+                details.append(f"ID: \"{el['resource-id']}\"")
+                
+            details_str = ", ".join(details)
+            clickable_badge = " [Clickable]" if el.get("clickable") else ""
+            output.append(f"[{idx}] {el['class']}{clickable_badge} -> Center: {el['center']} | {details_str}")
+            
+        return "\n".join(output)
+        
+    except Exception as e:
+        return f"Error executing UI layout dumper: {str(e)}"
+
 def parse_arguments(arg_str):
     if not arg_str.strip():
         return {}
@@ -1942,6 +2040,8 @@ def execute_local_tool(name, args_str):
         elif name == "read_phone_sensors":
             sensor_name = kwargs.get("sensor_name", "")
             return read_phone_sensors(sensor_name)
+        elif name == "dump_ui_layout":
+            return dump_ui_layout()
         else:
             return f"Error: Tool '{name}' is not recognized."
     except Exception as e:
