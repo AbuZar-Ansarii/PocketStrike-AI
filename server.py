@@ -1871,6 +1871,17 @@ def execute_scheduled_action(task, token):
         for cid in chats:
             send_telegram_msg(token, cid, msg)
 
+    # 3. Append to Unified Chat History so it appears in the Web chat dashboard
+    try:
+        messages = load_unified_history()
+        messages.append({
+            "role": "assistant",
+            "content": f"🔔 **[SCHEDULED ALERT]**\n\n**Reminder**: {desc}"
+        })
+        save_unified_history(messages)
+    except Exception as e:
+        print(f"Error appending alert to unified history: {e}")
+
 def parse_time_offset(trigger_str):
     import datetime
     import re
@@ -3088,12 +3099,22 @@ def send_telegram_photo(token, chat_id, photo_path, caption=None):
 # Web Server Routes
 @app.route('/api/history/load', methods=['GET'])
 def load_history():
-    return jsonify(load_unified_history())
+    messages = load_unified_history()
+    return jsonify([
+        {
+            "id": "default",
+            "title": "PocketStrike AI Unified Chat",
+            "messages": messages
+        }
+    ])
 
 @app.route('/api/history/sync', methods=['POST'])
 def sync_history():
     data = request.json or []
-    save_unified_history(data)
+    if data and isinstance(data, list) and len(data) > 0:
+        first_chat = data[0]
+        if isinstance(first_chat, dict) and "messages" in first_chat:
+            save_unified_history(first_chat["messages"])
     return jsonify({"status": "success"})
 
 @app.route('/')

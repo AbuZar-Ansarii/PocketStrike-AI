@@ -677,3 +677,43 @@ function parseMarkdown(text) {
 
     return html;
 }
+
+// Background Polling for Chat History changes (e.g. background alerts)
+let lastHistoryLength = 0;
+async function pollHistoryChanges() {
+    if (isGenerating) return; // Skip polling if streaming
+    
+    try {
+        const response = await fetch('/api/history/load');
+        if (response.ok) {
+            const serverConversations = await response.json();
+            if (serverConversations && serverConversations.length > 0) {
+                const serverMessages = serverConversations[0].messages;
+                
+                // Set initial length on first poll
+                if (lastHistoryLength === 0) {
+                    lastHistoryLength = serverMessages.length;
+                    return;
+                }
+                
+                // If history grew, update local memory and re-render
+                if (serverMessages.length !== lastHistoryLength) {
+                    lastHistoryLength = serverMessages.length;
+                    conversations = serverConversations;
+                    
+                    // Update active conversation reference
+                    const activeChat = conversations.find(c => c.id === activeConversationId);
+                    if (activeChat) {
+                        localStorage.setItem('pocketstrike_conversations', JSON.stringify(conversations));
+                        renderAll();
+                        scrollToBottom();
+                    }
+                }
+            }
+        }
+    } catch (err) {
+        console.error("Error polling history changes:", err);
+    }
+}
+// Run poll every 8 seconds
+setInterval(pollHistoryChanges, 8000);
