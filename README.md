@@ -164,6 +164,15 @@ PocketStrike AI has access to **50 built-in local tools** to audit, crawl, and c
 
 ---
 
+## 🔌 Model Context Protocol (MCP) Integration
+PocketStrike AI natively supports the **Model Context Protocol (MCP)** using HTTP/SSE (Server-Sent Events) transport. You can connect remote or cloud-hosted tool servers to your AI directly from the Web interface:
+1. Tap the **`+`** button in the **MCP Connections** section of the sidebar.
+2. Provide a descriptive **Server Name** and the **SSE Endpoint URL** (e.g. `http://192.168.1.50:8000/sse`).
+3. PocketStrike AI will establish an SSE stream connection, negotiate the client message endpoint, query the available tools list, and **automatically inject the remote tools** into the AI's instruction prompt.
+4. When the AI invokes these tools, calls are safely routed over JSON-RPC POST requests to the remote server, executing actions in real-time.
+
+---
+
 ## 🔒 Security Sandbox Guardrails
 *   **Path Enforcement**: The AI is strictly sandboxed. All write/read operations normalize path traversals (`..`) and resolve absolute real paths. If the AI tries to write or modify anything outside of `~/storage/shared/PocketStrike-AI`, the sandbox blocks it with an access denied error.
 *   **Core Code Protection**: Overwriting or modifying critical codebase files (like `server.py`, `setup.py`, `launch.sh`, etc.) is blocked by name, keeping the AI from corrupting its own server threads.
