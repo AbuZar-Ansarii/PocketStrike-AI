@@ -1867,8 +1867,8 @@ def execute_scheduled_action(task, token):
         speak_text(f"Notification: {desc}")
         
     if (target == "telegram" or target == "both") and token:
-        sessions = load_telegram_sessions()
-        for cid in sessions.keys():
+        chats = get_registered_telegram_chats()
+        for cid in chats:
             send_telegram_msg(token, cid, msg)
 
 def parse_time_offset(trigger_str):
@@ -2921,25 +2921,53 @@ def call_ai_api(messages):
     except Exception as e:
         return f"Request Error: {str(e)}"
 
-def load_telegram_sessions():
-    tg_file = os.path.join(WORKSPACE_DIR, "telegram_chats.json")
-    if os.path.exists(tg_file):
+def load_unified_history():
+    history_file = os.path.join(WORKSPACE_DIR, "unified_history.json")
+    if os.path.exists(history_file):
         try:
-            with open(tg_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return {int(k): v for k, v in data.items()}
+            with open(history_file, "r", encoding="utf-8") as f:
+                return json.load(f)
         except Exception as e:
-            print(f"Error loading telegram sessions: {e}")
-    return {}
+            print(f"Error loading unified history: {e}")
+    return [
+        {"role": "system", "content": "You are PocketstrikeAI, a helpful, cool, and highly advanced local AI assistant. Keep responses engaging."}
+    ]
 
-def save_telegram_sessions(sessions):
-    tg_file = os.path.join(WORKSPACE_DIR, "telegram_chats.json")
+def save_unified_history(history):
+    history_file = os.path.join(WORKSPACE_DIR, "unified_history.json")
     try:
-        os.makedirs(os.path.dirname(tg_file), exist_ok=True)
-        with open(tg_file, "w", encoding="utf-8") as f:
-            json.dump({str(k): v for k, v in sessions.items()}, f, indent=2, ensure_ascii=False)
+        os.makedirs(os.path.dirname(history_file), exist_ok=True)
+        with open(history_file, "w", encoding="utf-8") as f:
+            json.dump(history, f, indent=2, ensure_ascii=False)
     except Exception as e:
-        print(f"Error saving telegram sessions: {e}")
+        print(f"Error saving unified history: {e}")
+
+def register_telegram_chat(chat_id):
+    chats_file = os.path.join(WORKSPACE_DIR, "telegram_active_chats.json")
+    chats = []
+    if os.path.exists(chats_file):
+        try:
+            with open(chats_file, "r") as f:
+                chats = json.load(f)
+        except Exception:
+            pass
+    if chat_id not in chats:
+        chats.append(chat_id)
+        try:
+            with open(chats_file, "w") as f:
+                json.dump(chats, f)
+        except Exception:
+            pass
+
+def get_registered_telegram_chats():
+    chats_file = os.path.join(WORKSPACE_DIR, "telegram_active_chats.json")
+    if os.path.exists(chats_file):
+        try:
+            with open(chats_file, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
 
 # Telegram Bot Polling Thread
 def telegram_bot_loop(token):
@@ -2976,35 +3004,32 @@ def telegram_bot_loop(token):
 
                 print(f"Telegram Msg from {chat_id}: {text[:30]}...")
 
-                # Handle /start or initialize session
-                if text.strip() == "/start":
-                    sessions[chat_id] = [
-                        {"role": "system", "content": "You are PocketstrikeAI, a helpful, cool, and highly advanced local AI assistant. Keep responses engaging."}
-                    ]
-                    save_telegram_sessions(sessions)
-                    welcome_text = "⚡ **PocketstrikeAI Online** ⚡\n\nHello! I am your AI assistant running locally on Termux. Ask me anything!"
+                # Handle basic commands
+                if text == "/start":
+                    welcome_text = "👋 Welcome to PocketStrikeAI! I am your personal security and automation assistant. Ask me anything!"
                     send_telegram_msg(token, chat_id, welcome_text)
+                    register_telegram_chat(chat_id)
                     continue
 
-                if chat_id not in sessions:
-                    sessions[chat_id] = [
-                        {"role": "system", "content": "You are PocketstrikeAI, a helpful, cool, and highly advanced local AI assistant. Keep responses engaging."}
-                    ]
+                # Register active Telegram chat ID for scheduler notifications
+                register_telegram_chat(chat_id)
+
+                # Load unified history
+                messages = load_unified_history()
                 
                 # Append user prompt
-                sessions[chat_id].append({"role": "user", "content": text})
+                messages.append({"role": "user", "content": text})
                 
                 # Keep the full history log, but slide the API context at 60 messages to prevent token limits
-                if len(sessions[chat_id]) > 60:
-                    sessions[chat_id] = [sessions[chat_id][0]] + sessions[chat_id][-59:]
+                if len(messages) > 60:
+                    messages = [messages[0]] + messages[-59:]
 
                 # Send typing status
                 requests.post(f"https://api.telegram.org/bot{token}/sendChatAction", json={"chat_id": chat_id, "action": "typing"})
 
                 # Get AI answer (handles ReAct tool calls internally)
-                ai_response, updated_history = get_ai_response_with_tools(sessions[chat_id])
-                sessions[chat_id] = updated_history
-                save_telegram_sessions(sessions)
+                ai_response, updated_history = get_ai_response_with_tools(messages)
+                save_unified_history(updated_history)
                 
                 # Check if camera photo was successfully captured in the chat session
                 photo_path = os.path.join(WORKSPACE_DIR, "captured_photo.jpg")
@@ -3063,26 +3088,13 @@ def send_telegram_photo(token, chat_id, photo_path, caption=None):
 # Web Server Routes
 @app.route('/api/history/load', methods=['GET'])
 def load_history():
-    history_file = os.path.join(WORKSPACE_DIR, "web_chats.json")
-    if os.path.exists(history_file):
-        try:
-            with open(history_file, "r", encoding="utf-8") as f:
-                return jsonify(json.load(f))
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
-    return jsonify([])
+    return jsonify(load_unified_history())
 
 @app.route('/api/history/sync', methods=['POST'])
 def sync_history():
     data = request.json or []
-    history_file = os.path.join(WORKSPACE_DIR, "web_chats.json")
-    try:
-        os.makedirs(os.path.dirname(history_file), exist_ok=True)
-        with open(history_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        return jsonify({"status": "success"})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    save_unified_history(data)
+    return jsonify({"status": "success"})
 
 @app.route('/')
 def home():
@@ -3095,9 +3107,16 @@ def chat():
     if not messages:
         return jsonify({"error": "No messages provided"}), 400
         
+    save_unified_history(messages)
+    
     def generate():
+        streamed_text = ""
         for chunk in get_ai_response_stream(messages):
+            streamed_text += chunk
             yield chunk
+        if streamed_text:
+            messages.append({"role": "assistant", "content": streamed_text})
+            save_unified_history(messages)
 
     return Response(generate(), mimetype='text/event-stream')
 
