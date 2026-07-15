@@ -220,6 +220,12 @@ Available Tools:
     Lists all active, pending, or recurring tasks/crons.
 46. remove_scheduled_task(task_id)
     Removes a scheduled task/cron by its unique ID.
+47. detect_arp_spoofing()
+    Scans the local ARP cache to check if multiple IP addresses point to the same MAC address. Use this to audit for active Wi-Fi MITM/ARP spoofing interception attacks. (runs via local Linux file).
+48. audit_vpn_connection()
+    Checks the current public IP, ISP provider, and verifies if the connection is currently protected or leaking metadata through a VPN, proxy, or Tor exit node. (queries ip-api.com).
+49. audit_website_security(url)
+    Inspects a web domain or local server URL for SSL/TLS certificate validity (expiration date, issuer) and evaluates the presence of critical security headers (HSTS, CSP, X-Frame-Options, XSS protection).
 
 Instructions:
 - When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
@@ -1952,6 +1958,190 @@ def remove_scheduled_task(task_id):
     except Exception as e:
         return f"Error removing scheduled task: {str(e)}"
 
+def detect_arp_spoofing():
+    try:
+        arp_file = "/proc/net/arp"
+        if not os.path.exists(arp_file):
+            return "Error: ARP table file /proc/net/arp is not accessible. This tool requires Android/Linux environment."
+            
+        with open(arp_file, "r") as f:
+            lines = f.readlines()
+            
+        mac_to_ips = {}
+        for line in lines[1:]:
+            parts = line.split()
+            if len(parts) >= 4:
+                ip = parts[0]
+                mac = parts[3].lower()
+                
+                if mac not in ["00:00:00:00:00:00", "*", "00:00:00:00:00:00:00:00"]:
+                    if mac not in mac_to_ips:
+                        mac_to_ips[mac] = []
+                    mac_to_ips[mac].append(ip)
+                    
+        spoofed_entries = []
+        for mac, ips in mac_to_ips.items():
+            if len(ips) > 1:
+                spoofed_entries.append({
+                    "mac": mac,
+                    "ips": ips
+                })
+                
+        results = {
+            "status": "safe",
+            "message": "No active ARP spoofing detected. All MAC mappings are unique.",
+            "mappings_checked": len(mac_to_ips)
+        }
+        
+        if spoofed_entries:
+            results["status"] = "warning"
+            results["message"] = "WARNING: Potential ARP Spoofing / MITM attack detected! Multiple IP addresses map to the same MAC address."
+            results["conflicting_entries"] = spoofed_entries
+            
+        return json.dumps(results, indent=2)
+    except Exception as e:
+        return f"Error executing ARP spoofing detector: {str(e)}"
+
+def audit_vpn_connection():
+    try:
+        import requests
+        headers = {"User-Agent": "Mozilla/5.0"}
+        res = requests.get("http://ip-api.com/json/", headers=headers, timeout=10)
+        
+        if res.status_code != 200:
+            return f"Error connecting to lookup server (code {res.status_code})."
+            
+        data = res.json()
+        if data.get("status") != "success":
+            return f"Lookup failed: {data.get('message', 'Unknown failure')}"
+            
+        ip = data.get("query")
+        isp = data.get("isp", "")
+        org = data.get("org", "")
+        country = data.get("country", "")
+        
+        vpn_interface_active = False
+        vpn_interfaces = []
+        try:
+            import socket
+            if hasattr(socket, "if_nameindex"):
+                interfaces = [x[1] for x in socket.if_nameindex()]
+                for name in interfaces:
+                    if any(prefix in name.lower() for prefix in ["tun", "tap", "wg", "ppp", "vpn", "p2p"]):
+                        vpn_interface_active = True
+                        vpn_interfaces.append(name)
+        except Exception:
+            pass
+            
+        vpn_keywords = ["vpn", "hosting", "cloud", "mullvad", "nordvpn", "expressvpn", "surfshark", "cloudflare", "ovh", "digitalocean", "linode", "amazon", "google", "microsoft"]
+        isp_org_str = (isp + " " + org).lower()
+        is_vpn_isp = any(kw in isp_org_str for kw in vpn_keywords)
+        
+        status = "unprotected"
+        message = "No VPN connection detected. Your connection appears to be direct and unprotected."
+        
+        if vpn_interface_active or is_vpn_isp:
+            status = "protected"
+            reasons = []
+            if vpn_interface_active:
+                reasons.append(f"active VPN interface(s) detected: {', '.join(vpn_interfaces)}")
+            if is_vpn_isp:
+                reasons.append(f"public IP is owned by hosting/VPN provider ({isp})")
+            message = f"VPN connection detected. Your connection is protected via: {' and '.join(reasons)}."
+            
+        audit = {
+            "public_ip": ip,
+            "isp": isp,
+            "org": org,
+            "location": f"{data.get('city')}, {data.get('regionName')}, {country}",
+            "vpn_detection_status": status,
+            "message": message
+        }
+        return json.dumps(audit, indent=2)
+    except Exception as e:
+        return f"Error executing connection auditor: {str(e)}"
+
+def audit_website_security(url):
+    try:
+        import urllib.parse
+        import requests
+        import ssl
+        import socket
+        import datetime
+        
+        if not url.startswith("http://") and not url.startswith("https://"):
+            url = "https://" + url
+            
+        parsed_url = urllib.parse.urlparse(url)
+        domain = parsed_url.netloc or parsed_url.path
+        if ":" in domain:
+            domain = domain.split(":")[0]
+            
+        headers = {"User-Agent": "Mozilla/5.0"}
+        res = requests.get(url, headers=headers, timeout=12, verify=False)
+        resp_headers = res.headers
+        
+        security_headers = {
+            "Strict-Transport-Security": resp_headers.get("Strict-Transport-Security"),
+            "Content-Security-Policy": resp_headers.get("Content-Security-Policy"),
+            "X-Frame-Options": resp_headers.get("X-Frame-Options"),
+            "X-Content-Type-Options": resp_headers.get("X-Content-Type-Options"),
+            "Referrer-Policy": resp_headers.get("Referrer-Policy"),
+            "X-XSS-Protection": resp_headers.get("X-XSS-Protection")
+        }
+        
+        header_evals = {}
+        score = 0
+        total = len(security_headers)
+        for h, val in security_headers.items():
+            if val:
+                header_evals[h] = f"Present: {val[:40]}..." if len(val) > 40 else f"Present: {val}"
+                score += 1
+            else:
+                header_evals[h] = "MISSING! Susceptible to attacks."
+                
+        ssl_details = {}
+        if url.startswith("https://") or parsed_url.scheme == "https" or not parsed_url.scheme:
+            try:
+                context = ssl.create_default_context()
+                with socket.create_connection((domain, 443), timeout=5) as sock:
+                    with context.wrap_socket(sock, server_hostname=domain) as ssock:
+                        cert = ssock.getpeercert()
+                        
+                subject = dict(x[0] for x in cert.get('subject', ()))
+                issuer = dict(x[0] for x in cert.get('issuer', ()))
+                not_before = cert.get('notBefore')
+                not_after = cert.get('notAfter')
+                
+                expiry_dt = datetime.datetime.strptime(not_after, "%b %d %H:%M:%S %Y %Z")
+                remaining_days = (expiry_dt - datetime.datetime.utcnow()).days
+                
+                ssl_details = {
+                    "common_name": subject.get("commonName"),
+                    "issuer": issuer.get("organizationName") or issuer.get("commonName"),
+                    "not_before": not_before,
+                    "not_after": not_after,
+                    "days_remaining": remaining_days,
+                    "status": "valid" if remaining_days > 0 else "expired"
+                }
+            except Exception as ssl_err:
+                ssl_details = {
+                    "status": "error",
+                    "error_message": f"SSL Handshake failed: {str(ssl_err)}"
+                }
+                
+        audit_results = {
+            "target_url": url,
+            "target_domain": domain,
+            "status_code": res.status_code,
+            "security_headers_grade": f"{score}/{total} set",
+            "security_headers_audit": header_evals,
+            "ssl_certificate_details": ssl_details if ssl_details else "N/A (HTTP)"
+        }
+        return json.dumps(audit_results, indent=2)
+    except Exception as e:
+        return f"Error executing website security auditor: {str(e)}"
+
 def dump_ui_layout():
     try:
         import re
@@ -2291,6 +2481,15 @@ def execute_local_tool(name, args_str):
             if not task_id:
                 return "Error: Missing required argument 'task_id'."
             return remove_scheduled_task(task_id)
+        elif name == "detect_arp_spoofing":
+            return detect_arp_spoofing()
+        elif name == "audit_vpn_connection":
+            return audit_vpn_connection()
+        elif name == "audit_website_security":
+            url = kwargs.get("url")
+            if not url:
+                return "Error: Missing required argument 'url'."
+            return audit_website_security(url)
         else:
             return f"Error: Tool '{name}' is not recognized."
     except Exception as e:
