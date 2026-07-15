@@ -202,6 +202,12 @@ Available Tools:
     Opens a URL/Google search in the default browser on the Android phone screen (runs via local ADB or Shizuku shell). Use this when the user asks to open Google, search for something on their phone screen, or view a website.
 39. execute_root_command(command)
     Executes a shell command as SuperUser/Root (using 'su -c') inside Termux and returns the standard output. Only use this if the device has active root privileges, and when standard execute_termux_command is insufficient (e.g., to read protected app files, inspect low-level system attributes, or modify restricted network properties).
+40. audit_sms_inbox(limit=10)
+    Lists recent SMS messages from the inbox. Use this to audit for spam, phishing links, or suspicious text messages. (runs via local Termux-API).
+41. ip_geolocation_lookup(ip_address)
+    Performs a geographic lookup of an external IP address, resolving its country, region, city, ISP, and geographic coordinates. Use this to trace the origin of network connections or audit remote IPs.
+42. read_phone_sensors(sensor_name="")
+    Reads real-time data from phone hardware sensors. If sensor_name is omitted, lists all available sensors. If sensor_name is specified (e.g., 'Gravity', 'Light'), reads the sensor's current data values once. (runs via local Termux-API).
 
 Instructions:
 - When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
@@ -1648,6 +1654,68 @@ def execute_root_command(command):
     except Exception as e:
         return f"Error executing root command: {str(e)}"
 
+def audit_sms_inbox(limit=10):
+    try:
+        import subprocess
+        limit_val = max(1, min(int(limit), 50))
+        cmd = ["termux-sms-list", "-l", str(limit_val)]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        if res.returncode == 0:
+            return res.stdout.strip()
+        return f"Error listing SMS: {res.stderr} (Ensure Termux:API is installed and SMS read permission is granted)"
+    except Exception as e:
+        return f"Error executing SMS audit tool: {str(e)}"
+
+def ip_geolocation_lookup(ip_address):
+    try:
+        import requests
+        ip_clean = ip_address.strip()
+        # Use ip-api.com (free, no key required)
+        url = f"http://ip-api.com/json/{ip_clean}"
+        res = requests.get(url, timeout=10)
+        if res.status_code == 200:
+            data = res.json()
+            if data.get("status") == "success":
+                details = {
+                    "query": data.get("query"),
+                    "status": "success",
+                    "country": data.get("country"),
+                    "region_name": data.get("regionName"),
+                    "city": data.get("city"),
+                    "zip": data.get("zip"),
+                    "lat": data.get("lat"),
+                    "lon": data.get("lon"),
+                    "timezone": data.get("timezone"),
+                    "isp": data.get("isp"),
+                    "org": data.get("org"),
+                    "as": data.get("as")
+                }
+                return json.dumps(details, indent=2)
+            else:
+                return f"Error looking up IP: {data.get('message', 'Failed query')}"
+        return f"Error: Request failed with status code {res.status_code}"
+    except Exception as e:
+        return f"Error executing IP geolocation: {str(e)}"
+
+def read_phone_sensors(sensor_name=""):
+    try:
+        import subprocess
+        if not sensor_name:
+            cmd = ["termux-sensor", "-l"]
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=8)
+            if res.returncode == 0:
+                return res.stdout.strip()
+            return f"Error listing sensors: {res.stderr} (Ensure Termux:API is installed)"
+        else:
+            # Read specific sensor once
+            cmd = ["termux-sensor", "-n", "1", "-s", sensor_name]
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=12)
+            if res.returncode == 0:
+                return res.stdout.strip()
+            return f"Error reading sensor '{sensor_name}': {res.stderr}"
+    except Exception as e:
+        return f"Error executing sensor reader: {str(e)}"
+
 def parse_arguments(arg_str):
     if not arg_str.strip():
         return {}
@@ -1863,6 +1931,17 @@ def execute_local_tool(name, args_str):
             if not command:
                 return "Error: Missing required argument 'command'."
             return execute_root_command(command)
+        elif name == "audit_sms_inbox":
+            limit = kwargs.get("limit", 10)
+            return audit_sms_inbox(limit)
+        elif name == "ip_geolocation_lookup":
+            ip_address = kwargs.get("ip_address")
+            if not ip_address:
+                return "Error: Missing required argument 'ip_address'."
+            return ip_geolocation_lookup(ip_address)
+        elif name == "read_phone_sensors":
+            sensor_name = kwargs.get("sensor_name", "")
+            return read_phone_sensors(sensor_name)
         else:
             return f"Error: Tool '{name}' is not recognized."
     except Exception as e:
