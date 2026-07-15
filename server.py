@@ -200,6 +200,8 @@ Available Tools:
     Analyzes a cryptographic hash string to determine its likely algorithm (e.g. MD5, SHA-1, SHA-256, bcrypt).
 38. open_url_on_phone(url)
     Opens a URL/Google search in the default browser on the Android phone screen (runs via local ADB or Shizuku shell). Use this when the user asks to open Google, search for something on their phone screen, or view a website.
+39. execute_root_command(command)
+    Executes a shell command as SuperUser/Root (using 'su -c') inside Termux and returns the standard output. Only use this if the device has active root privileges, and when standard execute_termux_command is insufficient (e.g., to read protected app files, inspect low-level system attributes, or modify restricted network properties).
 
 Instructions:
 - When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
@@ -1612,6 +1614,40 @@ def open_url_on_phone(url):
     except Exception as e:
         return f"Error executing open URL tool: {str(e)}"
 
+def execute_root_command(command):
+    try:
+        import subprocess
+        import shutil
+        
+        # 1. Check if 'su' binary is available
+        su_path = shutil.which("su")
+        root_signatures = ["/system/bin/su", "/system/xbin/su", "/sbin/su", "/system/sd/xbin/su", "/system/bin/failsafe/su", "/data/local/xbin/su", "/data/local/bin/su"]
+        su_exists = su_path is not None or any(os.path.exists(p) for p in root_signatures)
+        
+        if not su_exists:
+            return "Error: SuperUser 'su' binary not found. This tool requires a rooted Android device."
+            
+        # Safety token validation (prevent basic bricking scenarios)
+        forbidden_tokens = ["rm -rf", "rm -f /", "mkfs", "dd if="]
+        for token in forbidden_tokens:
+            if token in command:
+                return f"Error: Root command blocked. Forbidden token: '{token}'"
+                
+        # Run command with su -c
+        # On Android, su -c "command" runs the command as root.
+        res = subprocess.run(["su", "-c", command], capture_output=True, text=True, timeout=30)
+        
+        output = f"Exit Code: {res.returncode}\n"
+        if res.stdout:
+            output += f"Stdout:\n{res.stdout}\n"
+        if res.stderr:
+            output += f"Stderr:\n{res.stderr}\n"
+        return output
+    except subprocess.TimeoutExpired:
+        return "Error: Root command execution timed out (limit: 30 seconds)."
+    except Exception as e:
+        return f"Error executing root command: {str(e)}"
+
 def parse_arguments(arg_str):
     if not arg_str.strip():
         return {}
@@ -1822,6 +1858,11 @@ def execute_local_tool(name, args_str):
             if not url:
                 return "Error: Missing required argument 'url'."
             return open_url_on_phone(url)
+        elif name == "execute_root_command":
+            command = kwargs.get("command")
+            if not command:
+                return "Error: Missing required argument 'command'."
+            return execute_root_command(command)
         else:
             return f"Error: Tool '{name}' is not recognized."
     except Exception as e:
