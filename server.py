@@ -3428,10 +3428,29 @@ def send_telegram_photo(token, chat_id, photo_path, caption=None):
         print(f"Error sending photo to Telegram: {e}")
         return False
 
+def check_mcp_status(url):
+    import requests
+    try:
+        res = requests.get(url, timeout=1.2)
+        # If it returns any HTTP code (even error codes like 405/404), the server port is active and online
+        return "connected"
+    except Exception:
+        return "offline"
+
 # Web Server Routes
 @app.route('/api/mcp/list', methods=['GET'])
 def list_mcp_servers():
-    return jsonify(load_mcp_connections())
+    conns = load_mcp_connections()
+    updated = False
+    for conn in conns:
+        old_status = conn.get("status")
+        new_status = check_mcp_status(conn.get("url"))
+        if old_status != new_status:
+            conn["status"] = new_status
+            updated = True
+    if updated:
+        save_mcp_connections(conns)
+    return jsonify(conns)
 
 @app.route('/api/mcp/add', methods=['POST'])
 def add_mcp_server():

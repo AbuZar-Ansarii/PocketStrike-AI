@@ -851,3 +851,6 @@ async function handleRemoveMcp(name) {
         console.error("Error removing MCP:", err);
     }
 }
+
+// Run MCP connection health check every 15 seconds to update the status dot
+setInterval(loadMcpConnections, 15000);
