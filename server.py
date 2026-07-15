@@ -1794,6 +1794,19 @@ def execute_scheduled_action(task, token):
     desc = task.get("description", "Scheduled Reminder")
     target = task.get("target", "system")
     
+    # 1. Print a visual warning in the Termux console and emit the ASCII Bell sound (\a)
+    import sys
+    import shutil
+    print(f"\n\033[1;32m🔔 [SCHEDULED ALERT] {desc}\033[0m\n", flush=True)
+    sys.stdout.write('\a')
+    sys.stdout.flush()
+    
+    # 2. Check if Termux:API is set up. If not, dynamically fallback to Telegram (if token exists)
+    termux_api_available = shutil.which("termux-notification") is not None
+    if not termux_api_available and target == "system":
+        if token:
+            target = "both"
+            
     msg = f"🔔 **PocketstrikeAI Alert** 🔔\n\nTask: {desc}"
     
     if target == "system" or target == "both":
