@@ -101,7 +101,11 @@ def get_system_prompt():
         except Exception:
             pass
 
+    import datetime
+    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S (Day: %A)")
+
     return f"""You are PocketStrike AI, a powerful local security and system assistant running in Termux on the user's Android phone.
+Current local time and date: {current_time}
 You are a self-evolving AI agent: you can grow, learn, and expand your capabilities over time by writing scripts, learning new rules, and persisting your memory.
 
 Your workspace directory is: {WORKSPACE_DIR} (which is located in the phone's internal storage).
