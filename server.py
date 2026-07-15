@@ -2622,9 +2622,9 @@ def execute_local_tool(name, args_str):
             mcp_conns = load_mcp_connections()
             mcp_tools_map = {}
             for conn in mcp_conns:
-                post_url = conn.get("post_url")
+                base_url = conn.get("url")
                 for t in conn.get("tools", []):
-                    mcp_tools_map[t.get("name")] = post_url
+                    mcp_tools_map[t.get("name")] = base_url
                     
             if name in mcp_tools_map:
                 return call_remote_mcp_tool(mcp_tools_map[name], name, kwargs)
@@ -3131,7 +3131,7 @@ def query_remote_mcp_tools(url):
             },
             "id": 100
         }
-        requests.post(post_url, json=init_payload, timeout=8)
+        requests.post(post_url, json=init_payload, headers={"Content-Type": "application/json"}, timeout=8)
         
         # Wait for initialize response
         for _ in range(50):
@@ -3148,7 +3148,7 @@ def query_remote_mcp_tools(url):
             "jsonrpc": "2.0",
             "method": "notifications/initialized"
         }
-        requests.post(post_url, json=initialized_payload, timeout=8)
+        requests.post(post_url, json=initialized_payload, headers={"Content-Type": "application/json"}, timeout=8)
         time.sleep(0.1)
         
         # C. Send tools/list request (id=101)
@@ -3158,7 +3158,7 @@ def query_remote_mcp_tools(url):
             "params": {},
             "id": 101
         }
-        requests.post(post_url, json=tools_payload, timeout=8)
+        requests.post(post_url, json=tools_payload, headers={"Content-Type": "application/json"}, timeout=8)
         
         # Wait for tools/list response
         for _ in range(50):
@@ -3255,7 +3255,7 @@ def call_remote_mcp_tool(base_url, tool_name, arguments):
             },
             "id": 100
         }
-        requests.post(post_url, json=init_payload, timeout=8)
+        requests.post(post_url, json=init_payload, headers={"Content-Type": "application/json"}, timeout=8)
         
         # Wait for initialize response
         for _ in range(50):
@@ -3272,7 +3272,7 @@ def call_remote_mcp_tool(base_url, tool_name, arguments):
             "jsonrpc": "2.0",
             "method": "notifications/initialized"
         }
-        requests.post(post_url, json=initialized_payload, timeout=8)
+        requests.post(post_url, json=initialized_payload, headers={"Content-Type": "application/json"}, timeout=8)
         time.sleep(0.1)
         
         # C. Send tools/call request (id=102)
@@ -3285,7 +3285,7 @@ def call_remote_mcp_tool(base_url, tool_name, arguments):
             },
             "id": 102
         }
-        requests.post(post_url, json=call_payload, timeout=20)
+        requests.post(post_url, json=call_payload, headers={"Content-Type": "application/json"}, timeout=20)
         
         # Wait for call response
         for _ in range(150):
