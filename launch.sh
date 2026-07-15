@@ -25,16 +25,14 @@ show_menu() {
         CONFIG_EXISTS=false
     fi
 
-    echo -e "${PINK}=======================================================${NC}"
     echo -e "${ORANGE}██████╗ ██╗  ██╗███████╗████████╗    █████╗ ██╗${NC}"
     echo -e "${ORANGE}██╔══██╗██║ ██╔╝██╔════╝╚══██╔══╝   ██╔══██╗██║${NC}"
     echo -e "${WHITE}██████╔╝█████╔╝ ███████╗   ██║      ███████║██║${NC}"
     echo -e "${WHITE}██╔═══╝ ██╔═██╗ ╚════██║   ██║      ██╔══██║██║${NC}"
     echo -e "${GREEN}██║     ██║  ██╗███████║   ██║      ██║  ██║██║${NC}"
     echo -e "${GREEN}╚═╝     ╚═╝  ╚═╝╚══════╝   ╚═╝      ╚═╝  ╚═╝╚═╝${NC}"
-    echo -e "${PINK}=======================================================${NC}"
-    echo -e "🤳 ${ORANGE}Pocket${WHITE}Strike${GREEN}-AI ${NC}─ ${ORANGE}Dashboard${NC} 🤳"
-    echo -e "${PINK}───────────────────────────────────────────────────────${NC}"
+    echo -e "       ${ORANGE}Pocket${WHITE}Strike${GREEN}-AI ${NC}— ${ORANGE}Dashboard${NC}"
+    echo -e "${GREEN}──────────────────────────────────────────────────────────────────────────${NC}"
     echo -e " Status: $SETUP_STATUS"
     
     if [ "$CONFIG_EXISTS" = true ]; then
@@ -49,12 +47,12 @@ except Exception:
 ' 2>/dev/null)
         echo -e " Active Model: ${CYAN}${INFO}${NC}"
     fi
-    echo -e "${PINK}───────────────────────────────────────────────────────${NC}"
+    echo -e "${GREEN}──────────────────────────────────────────────────────────────────────────${NC}"
     echo -e " Please choose an option:\n"
     echo -e "  [1] Run Interactive Setup Wizard"
     echo -e "  [2] Launch PocketstrikeAI Server & Bot"
     echo -e "  [3] Exit"
-    echo -e "\n${PINK}───────────────────────────────────────────────────────${NC}"
+    echo -e "\n${GREEN}──────────────────────────────────────────────────────────────────────────${NC}"
 }
 
 run_setup() {
