@@ -3056,15 +3056,21 @@ def save_mcp_connections(conns):
 def query_remote_mcp_tools(url):
     import requests
     import urllib.parse
+    import threading
+    import json
+    import time
     try:
         headers = {"Accept": "text/event-stream"}
-        # Start SSE request
+        # 1. Establish GET stream
         res = requests.get(url, headers=headers, stream=True, timeout=8)
         if res.status_code != 200:
             return None, f"SSE endpoint rejected connection (HTTP {res.status_code})"
             
         post_path = None
-        for line in res.iter_lines():
+        lines_iterator = res.iter_lines()
+        
+        # Read the first event to get the endpoint path
+        for line in lines_iterator:
             line_str = line.decode("utf-8").strip()
             if line_str.startswith("data:"):
                 post_path = line_str.replace("data:", "").strip()
@@ -3075,39 +3081,121 @@ def query_remote_mcp_tools(url):
         else:
             post_url = urllib.parse.urljoin(url, post_path)
             
-        # Keep SSE connection open while POSTing to verify session!
-        payload = {
+        # Shared state for thread communication
+        shared_state = {
+            "initialize_response": None,
+            "tools_response": None
+        }
+        
+        # Start background reader thread to capture incoming message events
+        def consume():
+            try:
+                current_event = None
+                for l in lines_iterator:
+                    if not l:
+                        continue
+                    line_decoded = l.decode("utf-8").strip()
+                    if line_decoded.startswith("event:"):
+                        current_event = line_decoded.replace("event:", "").strip()
+                    elif line_decoded.startswith("data:"):
+                        data_val = line_decoded.replace("data:", "").strip()
+                        if current_event == "message":
+                            try:
+                                msg = json.loads(data_val)
+                                if msg.get("id") == 100:
+                                    shared_state["initialize_response"] = msg
+                                elif msg.get("id") == 101:
+                                    shared_state["tools_response"] = msg
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+                
+        reader_thread = threading.Thread(target=consume, daemon=True)
+        reader_thread.start()
+        
+        # Tiny delay to let reader thread bind
+        time.sleep(0.1)
+        
+        # A. Send initialize request (id=100)
+        init_payload = {
+            "jsonrpc": "2.0",
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "pocketstrike-client",
+                    "version": "1.0.0"
+                }
+            },
+            "id": 100
+        }
+        requests.post(post_url, json=init_payload, timeout=8)
+        
+        # Wait for initialize response
+        for _ in range(50):
+            if shared_state["initialize_response"] is not None:
+                break
+            time.sleep(0.1)
+            
+        if not shared_state["initialize_response"]:
+            res.close()
+            return None, "Handshake timed out waiting for 'initialize' response."
+            
+        # B. Send initialized notification
+        initialized_payload = {
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+        }
+        requests.post(post_url, json=initialized_payload, timeout=8)
+        time.sleep(0.1)
+        
+        # C. Send tools/list request (id=101)
+        tools_payload = {
             "jsonrpc": "2.0",
             "method": "tools/list",
             "params": {},
-            "id": 1
+            "id": 101
         }
-        resp = requests.post(post_url, json=payload, timeout=8)
+        requests.post(post_url, json=tools_payload, timeout=8)
         
-        # Now close the stream
+        # Wait for tools/list response
+        for _ in range(50):
+            if shared_state["tools_response"] is not None:
+                break
+            time.sleep(0.1)
+            
+        # Close connection
         res.close()
         
-        if resp.status_code == 200:
-            data = resp.json()
-            if "result" in data and "tools" in data["result"]:
-                return data["result"]["tools"], post_url
-            return None, "Server did not return a valid list of tools."
-        return None, f"Failed querying tools (HTTP {resp.status_code})"
+        if shared_state["tools_response"]:
+            resp_data = shared_state["tools_response"]
+            if "result" in resp_data and "tools" in resp_data["result"]:
+                return resp_data["result"]["tools"], post_url
+            return None, f"Unexpected response format: {resp_data}"
+        return None, "Handshake timed out waiting for 'tools/list' response."
+        
     except Exception as e:
         return None, f"Connection failed: {str(e)}"
 
 def call_remote_mcp_tool(base_url, tool_name, arguments):
     import requests
     import urllib.parse
+    import threading
+    import json
+    import time
     try:
-        # Establish a fresh SSE connection to get an active session ID
         headers = {"Accept": "text/event-stream"}
+        # 1. Establish GET stream
         res = requests.get(base_url, headers=headers, stream=True, timeout=8)
         if res.status_code != 200:
             return f"Error: Failed to connect to remote SSE stream (HTTP {res.status_code})"
             
         post_path = None
-        for line in res.iter_lines():
+        lines_iterator = res.iter_lines()
+        
+        for line in lines_iterator:
             line_str = line.decode("utf-8").strip()
             if line_str.startswith("data:"):
                 post_path = line_str.replace("data:", "").strip()
@@ -3118,32 +3206,109 @@ def call_remote_mcp_tool(base_url, tool_name, arguments):
         else:
             post_url = urllib.parse.urljoin(base_url, post_path)
             
-        # Make the tool execution call while the SSE stream is still open
-        payload = {
+        shared_state = {
+            "initialize_response": None,
+            "call_response": None
+        }
+        
+        # Start background reader thread
+        def consume():
+            try:
+                current_event = None
+                for l in lines_iterator:
+                    if not l:
+                        continue
+                    line_decoded = l.decode("utf-8").strip()
+                    if line_decoded.startswith("event:"):
+                        current_event = line_decoded.replace("event:", "").strip()
+                    elif line_decoded.startswith("data:"):
+                        data_val = line_decoded.replace("data:", "").strip()
+                        if current_event == "message":
+                            try:
+                                msg = json.loads(data_val)
+                                if msg.get("id") == 100:
+                                    shared_state["initialize_response"] = msg
+                                elif msg.get("id") == 102:
+                                    shared_state["call_response"] = msg
+                                    break
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+                
+        reader_thread = threading.Thread(target=consume, daemon=True)
+        reader_thread.start()
+        
+        time.sleep(0.1)
+        
+        # A. Send initialize request (id=100)
+        init_payload = {
+            "jsonrpc": "2.0",
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "pocketstrike-client",
+                    "version": "1.0.0"
+                }
+            },
+            "id": 100
+        }
+        requests.post(post_url, json=init_payload, timeout=8)
+        
+        # Wait for initialize response
+        for _ in range(50):
+            if shared_state["initialize_response"] is not None:
+                break
+            time.sleep(0.1)
+            
+        if not shared_state["initialize_response"]:
+            res.close()
+            return "Error: Handshake timed out waiting for 'initialize' response during tool execution."
+            
+        # B. Send initialized notification
+        initialized_payload = {
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+        }
+        requests.post(post_url, json=initialized_payload, timeout=8)
+        time.sleep(0.1)
+        
+        # C. Send tools/call request (id=102)
+        call_payload = {
             "jsonrpc": "2.0",
             "method": "tools/call",
             "params": {
                 "name": tool_name,
                 "arguments": arguments
             },
-            "id": 2
+            "id": 102
         }
-        resp = requests.post(post_url, json=payload, timeout=25)
+        requests.post(post_url, json=call_payload, timeout=20)
         
-        # Close the stream
+        # Wait for call response
+        for _ in range(150):
+            if shared_state["call_response"] is not None:
+                break
+            time.sleep(0.1)
+            
+        # Close connection
         res.close()
         
-        if resp.status_code == 200:
-            data = resp.json()
-            if "result" in data and "content" in data["result"]:
-                contents = data["result"]["content"]
+        if shared_state["call_response"]:
+            resp_data = shared_state["call_response"]
+            if "result" in resp_data and "content" in resp_data["result"]:
+                contents = resp_data["result"]["content"]
                 text_outputs = []
                 for c in contents:
                     if c.get("type") == "text":
                         text_outputs.append(c.get("text", ""))
                 return "\n".join(text_outputs)
-            return f"Error: Unexpected response format: {resp.text}"
-        return f"Error: Tool execution failed (HTTP {resp.status_code})"
+            elif "error" in resp_data:
+                return f"Error from remote MCP server: {resp_data['error'].get('message')}"
+            return f"Error: Unexpected response format: {resp_data}"
+        return "Error: Tool execution timed out waiting for server response."
     except Exception as e:
         return f"Error executing remote MCP tool: {str(e)}"
 
