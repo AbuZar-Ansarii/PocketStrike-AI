@@ -2022,15 +2022,32 @@ def remove_scheduled_task(task_id):
         with open(schedules_file, "r", encoding="utf-8") as f:
             tasks = json.load(f)
             
-        filtered_tasks = [t for t in tasks if t.get("id") != task_id]
+        query = str(task_id).strip().lower()
         
-        if len(filtered_tasks) == len(tasks):
-            return f"Error: Task ID '{task_id}' not found."
+        # 1. Try exact ID match
+        target_task = None
+        for t in tasks:
+            if t.get("id").lower() == query:
+                target_task = t
+                break
+                
+        # 2. Try description substring match
+        if not target_task:
+            for t in tasks:
+                if query in t.get("description", "").lower():
+                    target_task = t
+                    break
+                    
+        if not target_task:
+            return f"Error: No task found matching ID or description '{task_id}'."
             
+        # Filter out target task
+        filtered_tasks = [t for t in tasks if t.get("id") != target_task.get("id")]
+        
         with open(schedules_file, "w", encoding="utf-8") as f:
             json.dump(filtered_tasks, f, indent=2, ensure_ascii=False)
             
-        return f"Success: Removed scheduled task '{task_id}'."
+        return f"Success: Removed scheduled task '{target_task.get('id')}' ({target_task.get('description')})."
     except Exception as e:
         return f"Error removing scheduled task: {str(e)}"
 
