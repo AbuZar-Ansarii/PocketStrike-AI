@@ -105,6 +105,32 @@ Choose option `2` from the launcher. Open the **Local URL** in your phone's brow
 
 ---
 
+## 🔌 Model Context Protocol (MCP) Integration
+PocketStrike AI natively supports the **Model Context Protocol (MCP)** using the HTTP/SSE (Server-Sent Events) transport. This turns your Termux AI agent into an MCP Client, enabling it to dynamically load, query, and run tools hosted on remote servers (e.g., your PC, local network, or cloud).
+
+### How to Connect a Remote Server:
+1. **Host Binding**: Start your MCP server on the host machine. To allow connections from your phone, ensure you bind it to `0.0.0.0` (all network cards) and select the SSE transport.
+   * *Example running a Python FastMCP script:*
+     ```bash
+     fastmcp run --host 0.0.0.0 --transport sse your_script.py
+     ```
+2. **Retrieve PC IP**: Locate the host PC's local IP address (e.g., `192.168.31.211`).
+3. **Register on Dashboard**: Open the PocketStrike Web UI on your phone:
+   * Tap the **`+`** button in the **MCP Connections** section of the sidebar.
+   * Provide a **Server Name** (e.g., `dice-roller`).
+   * Enter the **SSE Endpoint URL** (e.g., `http://192.168.31.211:8000/sse`).
+4. **Automatic Handshake**: PocketStrike AI will establish an active SSE stream connection, perform the official **initialize/initialized protocol handshake**, fetch the available tools, and automatically inject the remote tool schemas directly into the AI's instruction set.
+5. **Real-time Execution**: When the AI runs a remote tool, the request is wrapped in a standard JSON-RPC 2.0 structure, POSTed over the Wi-Fi network, and the result is returned live to the chat thread!
+
+---
+
+## 🔒 Security Sandbox Guardrails
+*   **Path Enforcement**: The AI is strictly sandboxed. All write/read operations normalize path traversals (`..`) and resolve absolute real paths. If the AI tries to write or modify anything outside of `~/storage/shared/PocketStrike-AI`, the sandbox blocks it with an access denied error.
+*   **Core Code Protection**: Overwriting or modifying critical codebase files (like `server.py`, `setup.py`, `launch.sh`, etc.) is blocked by name, keeping the AI from corrupting its own server threads.
+*   **Command Filter**: `execute_termux_command` filters and blocks dangerous destructive tokens (such as `rm -rf`, `rm -f /`, `mkfs`, `dd`) to protect the device.
+
+---
+
 ## 🔧 ReAct Function Calling Tools
 
 PocketStrike AI has access to **50 built-in local tools** to audit, crawl, and control systems:
@@ -161,29 +187,3 @@ PocketStrike AI has access to **50 built-in local tools** to audit, crawl, and c
 | 48 | `audit_vpn_connection()` | Audits public IP/ISP and checks local interface tables for VPN leaks. |
 | 49 | `audit_website_security(url)`| Audits HTTP security headers and queries SSL handshake validity parameters. |
 | 50 | `search_file_content(q, pat)`| Recursively searches text inside all workspace files matching a glob filter. |
-
----
-
-## 🔌 Model Context Protocol (MCP) Integration
-PocketStrike AI natively supports the **Model Context Protocol (MCP)** using the HTTP/SSE (Server-Sent Events) transport. This turns your Termux AI agent into an MCP Client, enabling it to dynamically load, query, and run tools hosted on remote servers (e.g., your PC, local network, or cloud).
-
-### How to Connect a Remote Server:
-1. **Host Binding**: Start your MCP server on the host machine. To allow connections from your phone, ensure you bind it to `0.0.0.0` (all network cards) and select the SSE transport.
-   * *Example running a Python FastMCP script:*
-     ```bash
-     fastmcp run --host 0.0.0.0 --transport sse your_script.py
-     ```
-2. **Retrieve PC IP**: Locate the host PC's local IP address (e.g., `192.168.31.211`).
-3. **Register on Dashboard**: Open the PocketStrike Web UI on your phone:
-   * Tap the **`+`** button in the **MCP Connections** section of the sidebar.
-   * Provide a **Server Name** (e.g., `dice-roller`).
-   * Enter the **SSE Endpoint URL** (e.g., `http://192.168.31.211:8000/sse`).
-4. **Automatic Handshake**: PocketStrike AI will establish an active SSE stream connection, perform the official **initialize/initialized protocol handshake**, fetch the available tools, and automatically inject the remote tool schemas directly into the AI's instruction set.
-5. **Real-time Execution**: When the AI runs a remote tool, the request is wrapped in a standard JSON-RPC 2.0 structure, POSTed over the Wi-Fi network, and the result is returned live to the chat thread!
-
----
-
-## 🔒 Security Sandbox Guardrails
-*   **Path Enforcement**: The AI is strictly sandboxed. All write/read operations normalize path traversals (`..`) and resolve absolute real paths. If the AI tries to write or modify anything outside of `~/storage/shared/PocketStrike-AI`, the sandbox blocks it with an access denied error.
-*   **Core Code Protection**: Overwriting or modifying critical codebase files (like `server.py`, `setup.py`, `launch.sh`, etc.) is blocked by name, keeping the AI from corrupting its own server threads.
-*   **Command Filter**: `execute_termux_command` filters and blocks dangerous destructive tokens (such as `rm -rf`, `rm -f /`, `mkfs`, `dd`) to protect the device.
