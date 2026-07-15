@@ -1,9 +1,4 @@
-<p align="center"> 
-  # ⚡ PocketStrike AI ⚡
-</p>
-
 <img width="2078" height="490" alt="PocketStrike-AI" src="https://github.com/user-attachments/assets/3aa90a7e-0379-4b7e-a0d9-5d39ffb4e171" />
-
 
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Termux%20%7C%20Android-green?style=for-the-badge&logo=android" alt="Platform" />
