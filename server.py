@@ -192,6 +192,14 @@ Available Tools:
     Scans nearby Wi-Fi hotspots and returns network details (SSID, BSSID, RSSI, channel, security mode).
 34. speak_text(text)
     Uses the Android Text-To-Speech engine to read the specified text aloud.
+35. dns_lookup(domain, record_type="A")
+    Queries DNS records (A, AAAA, MX, TXT, CNAME, NS) for a target domain using Cloudflare DNS-over-HTTPS.
+36. whois_lookup(domain)
+    Queries domain registration and registrar details using public RDAP APIs.
+37. analyze_hash(hash_str)
+    Analyzes a cryptographic hash string to determine its likely algorithm (e.g. MD5, SHA-1, SHA-256, bcrypt).
+38. open_url_on_phone(url)
+    Opens a URL/Google search in the default browser on the Android phone screen (runs via local ADB or Shizuku shell). Use this when the user asks to open Google, search for something on their phone screen, or view a website.
 
 Instructions:
 - When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
@@ -1014,6 +1022,7 @@ def run_adb_command(cmd_str):
         import shutil
         import os
         import glob
+        import shlex
         
         # Check if rish (Shizuku's Termux shell interface) is installed and available
         rish_path = shutil.which("rish")
@@ -1065,50 +1074,87 @@ def run_adb_command(cmd_str):
                     print(f"PocketstrikeAI: Shizuku auto-install failed: {e}")
                     
         use_shizuku = rish_path is not None
-        
+        shizuku_err = None
+        adb_err = None
+
+        env = os.environ.copy()
+        env["RISH_APPLICATION_ID"] = get_termux_package_id()
+        env.pop("LD_LIBRARY_PATH", None)
+        env.pop("LD_PRELOAD", None)
+        shell_exe = "/system/bin/sh" if os.path.exists("/system/bin/sh") else "sh"
+
+        # --- 1. TRY SHIZUKU FIRST IF AVAILABLE ---
         if use_shizuku:
-            # Set application environment ID required by Shizuku binder API
-            env = os.environ.copy()
-            env["RISH_APPLICATION_ID"] = get_termux_package_id()
-            # Clear Termux library paths so system app_process works correctly
-            env.pop("LD_LIBRARY_PATH", None)
-            env.pop("LD_PRELOAD", None)
-            shell_exe = "/system/bin/sh" if os.path.exists("/system/bin/sh") else "sh"
-            
-            # Route ADB shell commands directly through Shizuku Binder API
-            if cmd_str.startswith("shell "):
-                shell_cmd = cmd_str[6:] # Strip "shell "
-                
-                # Check if it's the screenshot stream
-                if shell_cmd == "screencap -p":
-                    return True, "STDOUT_STREAMING_ACTIVE"
+            try:
+                if cmd_str.startswith("shell "):
+                    shell_cmd = cmd_str[6:] # Strip "shell "
                     
-                res = subprocess.run([shell_exe, rish_path, "-c", shell_cmd], capture_output=True, text=True, timeout=15, env=env)
-                if res.returncode == 0:
-                    return True, res.stdout
-                return False, res.stderr
-            elif cmd_str.startswith("devices"):
-                # Shizuku acts as a virtual local attached device
-                return True, "List of devices attached\nshizuku_localhost\tdevice"
+                    if shell_cmd == "screencap -p":
+                        return True, "STDOUT_STREAMING_ACTIVE"
+                        
+                    res = subprocess.run([shell_exe, rish_path, "-c", shell_cmd], capture_output=True, text=True, timeout=15, env=env)
+                    if res.returncode == 0:
+                        return True, res.stdout
+                    else:
+                        shizuku_err = f"Shizuku shell cmd failed (code {res.returncode}): {res.stderr.strip() or res.stdout.strip()}"
+                
+                elif cmd_str.startswith("devices"):
+                    # Check if Shizuku daemon is running and responds
+                    res = subprocess.run([shell_exe, rish_path, "-c", "echo 1"], capture_output=True, text=True, timeout=3, env=env)
+                    if res.returncode == 0:
+                        return True, "List of devices attached\nshizuku_localhost\tdevice"
+                    else:
+                        shizuku_err = f"Shizuku test failed: {res.stderr.strip() or res.stdout.strip()}"
+                
+                elif cmd_str.startswith("pull "):
+                    parts = shlex.split(cmd_str)
+                    if len(parts) >= 3:
+                        src = parts[1]
+                        dest = parts[2]
+                        try:
+                            with open(dest, "wb") as f:
+                                res = subprocess.run([shell_exe, rish_path, "-c", f"cat {src}"], stdout=f, env=env, timeout=15)
+                            if res.returncode == 0:
+                                return True, "Pulled via Shizuku shell cat"
+                            else:
+                                shizuku_err = f"Shizuku cat failed (code {res.returncode})"
+                        except Exception as e:
+                            shizuku_err = f"Shizuku pull exception: {e}"
+                    else:
+                        shizuku_err = "Invalid pull command parameters"
+            except Exception as e:
+                shizuku_err = f"Shizuku exception: {str(e)}"
+
+        # --- 2. TRY ADB FALLBACK IF SHIZUKU FAILED OR NOT AVAILABLE ---
+        try:
+            if cmd_str.startswith("shell "):
+                shell_cmd = cmd_str[6:]
+                res = subprocess.run(["adb", "shell", shell_cmd], capture_output=True, text=True, timeout=15)
             elif cmd_str.startswith("pull "):
-                # For file transfers via Shizuku, we copy directly from Shared Storage /sdcard/
-                parts = cmd_str.split()
-                if len(parts) >= 3:
-                    src = parts[1]
-                    dest = parts[2]
-                    try:
-                        # Copy via local Shizuku cat transfer
-                        with open(dest, "wb") as f:
-                            subprocess.run([shell_exe, rish_path, "-c", f"cat {src}"], stdout=f, env=env, timeout=15)
-                        return True, "Pulled via Shizuku shell cat"
-                    except Exception as e:
-                        return False, f"Shizuku cat transfer error: {e}"
-                                
-        # Standard ADB runner fallback
-        res = subprocess.run(f"adb {cmd_str}", shell=True, capture_output=True, text=True, timeout=15)
-        if res.returncode == 0:
-            return True, res.stdout
-        return False, res.stderr
+                parts = shlex.split(cmd_str)
+                res = subprocess.run(["adb"] + parts, capture_output=True, text=True, timeout=15)
+            else:
+                parts = shlex.split(cmd_str)
+                res = subprocess.run(["adb"] + parts, capture_output=True, text=True, timeout=15)
+
+            if res.returncode == 0:
+                return True, res.stdout
+            else:
+                adb_err = f"ADB cmd failed (code {res.returncode}): {res.stderr.strip() or res.stdout.strip()}"
+        except Exception as e:
+            adb_err = f"ADB exception: {str(e)}"
+
+        # --- 3. BOTH FAILED: COMPILE DIAGNOSTIC ERROR MESSAGE ---
+        errors = []
+        if shizuku_err:
+            errors.append(f"[Shizuku] {shizuku_err}")
+        if adb_err:
+            errors.append(f"[ADB Fallback] {adb_err}")
+        
+        if not errors:
+            errors.append("No execution methods succeeded (Shizuku not configured, ADB not found/connected).")
+            
+        return False, "\n".join(errors)
     except Exception as e:
         return False, str(e)
 
@@ -1447,6 +1493,125 @@ def search_files(pattern):
     except Exception as e:
         return f"Error searching files: {str(e)}"
 
+def dns_lookup(domain, record_type="A"):
+    try:
+        import requests
+        url = "https://cloudflare-dns.com/dns-query"
+        headers = {"Accept": "application/dns-json"}
+        params = {"name": domain, "type": record_type}
+        res = requests.get(url, headers=headers, params=params, timeout=10)
+        if res.status_code != 200:
+            return f"Error: DNS query failed with status code {res.status_code}"
+        data = res.json()
+        if "Answer" not in data:
+            return f"No records of type {record_type} found for {domain}."
+        answers = []
+        for ans in data["Answer"]:
+            answers.append(f"Name: {ans.get('name')}, Type: {ans.get('type')}, TTL: {ans.get('TTL')}, Data: {ans.get('data')}")
+        return "\n".join(answers)
+    except Exception as e:
+        return f"Error during DNS lookup: {str(e)}"
+
+def whois_lookup(domain):
+    try:
+        import requests
+        url = f"https://rdap.org/domain/{domain.strip().lower()}"
+        res = requests.get(url, timeout=10)
+        if res.status_code == 404:
+            return f"Domain {domain} not found or not supported by RDAP."
+        elif res.status_code != 200:
+            return f"Error: RDAP query failed with status code {res.status_code}"
+        
+        data = res.json()
+        registrar = "Unknown"
+        for entity in data.get("entities", []):
+            if "registrar" in entity.get("roles", []):
+                vcard = entity.get("vcardArray", [])
+                if len(vcard) > 1:
+                    for field in vcard[1]:
+                        if field[0] == "fn":
+                            registrar = field[3]
+                            break
+        
+        events = []
+        for event in data.get("events", []):
+            event_action = event.get("eventAction", "")
+            event_date = event.get("eventDate", "")
+            events.append(f"{event_action.capitalize()}: {event_date}")
+            
+        summary = [
+            f"Domain: {data.get('ldhName', domain)}",
+            f"Registrar: {registrar}",
+            "Status: " + ", ".join(data.get("status", ["Unknown"])),
+            "Events:\n  " + "\n  ".join(events) if events else "Events: Unknown"
+        ]
+        
+        nameservers = [ns.get("ldhName") for ns in data.get("nameservers", []) if ns.get("ldhName")]
+        if nameservers:
+            summary.append("Nameservers: " + ", ".join(nameservers))
+            
+        return "\n".join(summary)
+    except Exception as e:
+        return f"Error during WHOIS lookup: {str(e)}"
+
+def analyze_hash(hash_str):
+    try:
+        hash_str = hash_str.strip()
+        length = len(hash_str)
+        
+        import re
+        is_hex = bool(re.match(r'^[a-fA-F0-9]+$', hash_str))
+        
+        possible_types = []
+        if is_hex:
+            if length == 32:
+                possible_types.append("MD5")
+            elif length == 40:
+                possible_types.append("SHA-1")
+            elif length == 56:
+                possible_types.append("SHA-224")
+            elif length == 64:
+                possible_types.append("SHA-256")
+            elif length == 96:
+                possible_types.append("SHA-384")
+            elif length == 128:
+                possible_types.append("SHA-512")
+                
+        if hash_str.startswith("$2a$") or hash_str.startswith("$2b$") or hash_str.startswith("$2y$"):
+            if length == 60:
+                possible_types.append("bcrypt")
+        elif hash_str.startswith("$pbkdf2-sha256$"):
+            possible_types.append("PBKDF2-SHA256")
+        elif hash_str.startswith("$argon2id$") or hash_str.startswith("$argon2i$"):
+            possible_types.append("Argon2")
+            
+        if not possible_types:
+            if length == 16:
+                possible_types.append("Half-MD5")
+            else:
+                return f"Could not identify the hash format of '{hash_str}'. Length: {length}."
+                
+        return f"Hash: {hash_str}\nLikely Algorithm(s): {', '.join(possible_types)}"
+    except Exception as e:
+        return f"Error analyzing hash: {str(e)}"
+
+def open_url_on_phone(url):
+    try:
+        # Standardize URL
+        if not url.startswith("http://") and not url.startswith("https://"):
+            url = "https://" + url
+            
+        ok, out = run_adb_command("devices")
+        if not ok or len([line for line in out.strip().split("\n") if "device" in line and not "devices" in line]) == 0:
+            return "Error: ADB/Shizuku is not connected. Enable Wireless Debugging or start Shizuku app first."
+            
+        ok, out = run_adb_command(f"shell am start -a android.intent.action.VIEW -d '{url}'")
+        if ok:
+            return f"Success: Opened URL '{url}' on Android phone screen."
+        return f"Error opening URL on phone: {out}"
+    except Exception as e:
+        return f"Error executing open URL tool: {str(e)}"
+
 def parse_arguments(arg_str):
     if not arg_str.strip():
         return {}
@@ -1636,6 +1801,27 @@ def execute_local_tool(name, args_str):
             if not text:
                 return "Error: Missing required argument 'text'."
             return speak_text(text)
+        elif name == "dns_lookup":
+            domain = kwargs.get("domain")
+            record_type = kwargs.get("record_type", "A")
+            if not domain:
+                return "Error: Missing required argument 'domain'."
+            return dns_lookup(domain, record_type)
+        elif name == "whois_lookup":
+            domain = kwargs.get("domain")
+            if not domain:
+                return "Error: Missing required argument 'domain'."
+            return whois_lookup(domain)
+        elif name == "analyze_hash":
+            hash_str = kwargs.get("hash_str")
+            if not hash_str:
+                return "Error: Missing required argument 'hash_str'."
+            return analyze_hash(hash_str)
+        elif name == "open_url_on_phone":
+            url = kwargs.get("url")
+            if not url:
+                return "Error: Missing required argument 'url'."
+            return open_url_on_phone(url)
         else:
             return f"Error: Tool '{name}' is not recognized."
     except Exception as e:
