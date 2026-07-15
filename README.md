@@ -7,9 +7,9 @@
   <img src="https://img.shields.io/badge/License-MIT-orange?style=for-the-badge" alt="License" />
 </p>
 
-PocketStrike AI is a highly optimized, fully featured local AI assistant, background automation engine, and cybersecurity suite running directly inside Termux on Android. It couples a gorgeous, responsive, glassmorphic chat interface with an advanced ReAct (Reasoning and Action) Function Calling Framework to inspect your phone’s system parameters, run subnet-wide network sweeps, write and execute local sandboxed Python scripts, search the web using RAG, and audit Android system security.
+PocketStrike AI is a highly optimized, fully featured local AI assistant, background automation engine, and cybersecurity suite running directly inside Termux on Android. It couples a gorgeous, responsive, glassmorphic chat interface with an advanced ReAct (Reasoning and Action) Function Calling Framework and native Model Context Protocol (MCP) support. This allows you to inspect your phone’s system parameters, run subnet-wide network sweeps, execute background crons, dump active UI layouts for device automation, run sandboxed Python scripts, search the web using RAG, and connect to remote tool servers over SSE (Server-Sent Events) to execute cloud microservices.
 
-Additionally, it integrates a Telegram Bot backend with unified session tracking, allowing you to trigger any of these system tools or query your AI models remotely from your Telegram app.
+Additionally, it integrates a Telegram Bot backend with unified session tracking, allowing you to trigger any of these system tools, check background schedules, or query your AI models remotely from your Telegram app.
 
 ---
 
