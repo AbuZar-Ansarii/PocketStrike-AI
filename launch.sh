@@ -3,55 +3,52 @@
 # PocketstrikeAI Launcher Script for Termux
 # Shows a menu to configure or start the server.
 
-# Colors
-GREEN='\033[0;32m'
+# Colors (UI-Matching Cyber Theme)
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
-TERM_GREEN='\033[38;5;46m'
-TERM_WHITE='\033[38;5;255m'
-TERM_BLUE='\033[38;5;39m'
+PINK='\033[1;35m' # UI Matching Pink/Magenta
 NC='\033[0m' # No Color
 
 show_menu() {
     clear
     # Check if config.json exists
     if [ -f "config.json" ]; then
-        SETUP_CHECK="${GREEN}[✓]${NC}"
+        SETUP_STATUS="${CYAN}[ Configured ]${NC}"
         CONFIG_EXISTS=true
     else
-        SETUP_CHECK="${RED}[ ]${NC}"
+        SETUP_STATUS="${RED}[ Unconfigured ]${NC}"
         CONFIG_EXISTS=false
     fi
 
-    echo -e "${TERM_GREEN}██████╗ ██╗  ██╗███████╗████████╗    █████╗ ██╗${NC}"
-    echo -e "${TERM_GREEN}██╔══██╗██║ ██╔╝██╔════╝╚══██╔══╝   ██╔══██╗██║${NC}"
-    echo -e "${TERM_WHITE}██████╔╝█████╔╝ ███████╗   ██║      ███████║██║${NC}"
-    echo -e "${TERM_WHITE}██╔═══╝ ██╔═██╗ ╚════██║   ██║      ██╔══██║██║${NC}"
-    echo -e "${TERM_BLUE}██║     ██║  ██╗███████║   ██║      ██║  ██║██║${NC}"
-    echo -e "${TERM_BLUE}╚═╝     ╚═╝  ╚═╝╚══════╝   ╚═╝      ╚═╝  ╚═╝╚═╝${NC}"
-    echo -e "${TERM_GREEN}─────────────────────────────── Dashboard ────────────────────────────────${NC}"
-    echo -e " Please choose an option:\n"
-    echo -e "  ${SETUP_CHECK} 1. Run Setup Wizard"
-    echo -e "      2. Launch PocketstrikeAI Server & Bot"
-    echo -e "      3. Exit"
-    echo -e "${TERM_GREEN}──────────────────────────────────────────────────────────────────────────${NC}"
+    echo -e "${PINK}▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄${NC}"
+    echo -e "${CYAN}██░▄▄▄░██░▄▄░██░▄▄▄██░▀██░██░▄▄▀██░████░▄▄▀██░███░██${NC}"
+    echo -e "${CYAN}██░███░██░▀▀░██░▄▄▄██░█░█░██░█████░████░▀▀░██░█░█░██${NC}"
+    echo -e "${CYAN}██░▀▀▀░██░█████░▀▀▀██░██▄░██░▀▀▄██░▀▀░█░██░██▄▀▄▀▄██${NC}"
+    echo -e "${PINK}▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀${NC}"
+    echo -e "🤳 ${CYAN}POCKETSTRIKE AI  ─  LAUNCHER DASHBOARD${NC} 🤳"
+    echo -e "${PINK}───────────────────────────────────────────────────${NC}"
+    echo -e " Status: $SETUP_STATUS"
     
     if [ "$CONFIG_EXISTS" = true ]; then
-        # Read provider and model from config.json (using simple python command to avoid installing jq)
         INFO=$(python -c '
-import json, sys
+import json
 try:
     with open("config.json") as f:
         cfg = json.load(f)
-        print(f"{cfg.get(\"provider_name\", \"Unknown\")} ({cfg.get(\"model\", \"Unknown\")})")
+        print(f"{cfg.get(\"provider_name\", \"Unknown\").upper()} ({cfg.get(\"model\", \"Unknown\")})")
 except Exception:
-    print("Invalid Config")
+    print("Invalid Configuration")
 ' 2>/dev/null)
-        echo -e "Current Config: ${GREEN}${INFO}${NC}"
-        echo -e "${CYAN}--------------------------------------------------${NC}"
+        echo -e " Active Model: ${CYAN}${INFO}${NC}"
     fi
+    echo -e "${PINK}───────────────────────────────────────────────────${NC}"
+    echo -e " Please choose an option:\n"
+    echo -e "  [1] Run Interactive Setup Wizard"
+    echo -e "  [2] Launch PocketstrikeAI Server & Bot"
+    echo -e "  [3] Exit"
+    echo -e "\n${PINK}───────────────────────────────────────────────────${NC}"
 }
 
 run_setup() {
@@ -72,7 +69,7 @@ launch_server() {
         return
     fi
 
-    echo -e "\n${GREEN}Starting PocketstrikeAI...${NC}"
+    echo -e "\n${CYAN}Starting PocketstrikeAI Server...${NC}"
     python server.py
 }
 
