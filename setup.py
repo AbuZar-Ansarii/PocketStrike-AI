@@ -3,21 +3,19 @@ import json
 import os
 import sys
 
-# Define colors for CLI terminal (matching green/white UI theme)
-ORANGE = "\033[38;5;208m"
-WHITE = "\033[38;5;255m"
-GREEN = "\033[38;5;46m"
-BLUE = "\033[0;34m"
+# Define colors for CLI terminal (matching UI theme)
+BLUE = "\033[38;5;39m" # Vibrant Cyber Blue
+GREEN = "\033[38;5;46m" # Bright Green
 CYAN = "\033[0;36m"
 YELLOW = "\033[1;33m"
 RED = "\033[0;31m"
 NC = "\033[0m"
 
-BANNER = f"""{ORANGE}██████╗ ██████╗ ███████╗████████╗        █████╗  ██╗
+BANNER = f"""{BLUE}██████╗ ██████╗ ███████╗████████╗        █████╗  ██╗
 ██╔══██╗██╔════╝██╔════╝╚══██╔══╝        ██╔══██╗██║
-{WHITE}██████╔╝██║     ███████╗   ██║   ███████╗███████║██║
-██╔═══╝ ██║     ╚════██║   ██║   ╚══════╝██╔══██║██║
-{GREEN}██║     ╚██████╗███████║   ██║           ██║  ██║██║
+██████╔╝██║     ███████╗   ██║   ███████╗███████║██║
+{GREEN}██╔═══╝ ██║     ╚════██║   ██║   ╚══════╝██╔══██║██║
+██║     ╚██████╗███████║   ██║           ██║  ██║██║
 ╚═╝      ╚═════╝╚══════╝   ╚═╝           ╚═╝  ╚═╝╚═╝{NC}"""
 
 def clear_screen():
@@ -26,7 +24,7 @@ def clear_screen():
 def print_header():
     clear_screen()
     print(BANNER)
-    print(f"       {ORANGE}Pocket{WHITE}Strike{GREEN}-AI {NC}— {ORANGE}Onboarding{NC}")
+    print(f"       {BLUE}Pocket{GREEN}Strike-AI {NC}— {BLUE}Onboarding{NC}")
     print(f"{GREEN}──────────────────────────────────────────────────────────────────────────{NC}\n")
 
 def get_input(prompt, default=None, is_password=False):

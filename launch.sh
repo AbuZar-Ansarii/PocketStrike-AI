@@ -4,15 +4,12 @@
 # Shows a menu to configure or start the server.
 
 # Colors (UI-Matching Cyber Theme)
-BLUE='\033[0;34m'
+BLUE='\033[38;5;39m' # Vibrant Cyber Blue
 CYAN='\033[0;36m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
-PINK='\033[1;35m' # UI Matching Pink/Magenta
 NC='\033[0m' # No Color
-ORANGE='\033[38;5;208m'
-WHITE='\033[38;5;255m'
-GREEN='\033[38;5;46m'
+GREEN='\033[38;5;46m' # Bright Green
 
 show_menu() {
     clear
@@ -25,13 +22,13 @@ show_menu() {
         CONFIG_EXISTS=false
     fi
 
-    echo -e "${ORANGE}██████╗ ██████╗ ███████╗████████╗        █████╗  ██╗${NC}"
-    echo -e "${ORANGE}██╔══██╗██╔════╝██╔════╝╚══██╔══╝        ██╔══██╗██║${NC}"
-    echo -e "${WHITE}██████╔╝██║     ███████╗   ██║   ███████╗███████║██║${NC}"
-    echo -e "${WHITE}██╔═══╝ ██║     ╚════██║   ██║   ╚══════╝██╔══██║██║${NC}"
+    echo -e "${BLUE}██████╗ ██████╗ ███████╗████████╗        █████╗  ██╗${NC}"
+    echo -e "${BLUE}██╔══██╗██╔════╝██╔════╝╚══██╔══╝        ██╔══██╗██║${NC}"
+    echo -e "${BLUE}██████╔╝██║     ███████╗   ██║   ███████╗███████║██║${NC}"
+    echo -e "${GREEN}██╔═══╝ ██║     ╚════██║   ██║   ╚══════╝██╔══██║██║${NC}"
     echo -e "${GREEN}██║     ╚██████╗███████║   ██║           ██║  ██║██║${NC}"
     echo -e "${GREEN}╚═╝      ╚═════╝╚══════╝   ╚═╝           ╚═╝  ╚═╝╚═╝${NC}"
-    echo -e "       ${ORANGE}Pocket${WHITE}Strike${GREEN}-AI ${NC}— ${ORANGE}Dashboard${NC}"
+    echo -e "       ${BLUE}Pocket${GREEN}Strike-AI ${NC}— ${BLUE}Dashboard${NC}"
     echo -e "${GREEN}──────────────────────────────────────────────────────────────────────────${NC}"
     echo -e " Status: $SETUP_STATUS"
     
