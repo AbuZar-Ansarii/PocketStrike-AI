@@ -133,8 +133,8 @@ Available Tools:
    Scans a target IP address for open ports. Use lists like [22, 80, 443]. Keep target list short.
 3. list_directory(path=".")
    Lists files and directories. Defaults to your workspace directory ({WORKSPACE_DIR}).
-4. read_file_content(file_path)
-   Reads the content of a text file inside your workspace directory.
+4. read_file_content(file_path, offset=0, limit=15000)
+   Reads the content of a text file inside your workspace directory. Supports paging via 'offset' and 'limit' parameters for large files.
 5. write_file_content(file_path, content)
    Creates or overwrites a file inside your workspace directory. Useful for saving Python scripts or files (like 'memory.json' and 'instructions.txt').
 6. run_python_script(script_name, args=[...])
@@ -226,6 +226,8 @@ Available Tools:
     Checks the current public IP, ISP provider, and verifies if the connection is currently protected or leaking metadata through a VPN, proxy, or Tor exit node. (queries ip-api.com).
 49. audit_website_security(url)
     Inspects a web domain or local server URL for SSL/TLS certificate validity (expiration date, issuer) and evaluates the presence of critical security headers (HSTS, CSP, X-Frame-Options, XSS protection).
+50. search_file_content(query, pattern="*")
+    Searches recursively for a text query inside all files in the workspace (optionally filtered by a glob pattern like '*.py' or '*.txt'). Returns matching line numbers and contents.
 
 Instructions:
 - When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
@@ -503,7 +505,7 @@ def list_directory(path="."):
     except Exception as e:
         return f"Error listing directory: {str(e)}"
 
-def read_file_content(file_path):
+def read_file_content(file_path, offset=0, limit=15000):
     if not os.path.isabs(os.path.expanduser(file_path)):
         target_path = os.path.abspath(os.path.join(WORKSPACE_DIR, file_path))
     else:
@@ -515,13 +517,63 @@ def read_file_content(file_path):
         return f"Error: '{file_path}' is a directory. Use list_directory to see its contents."
         
     try:
+        file_size = os.path.getsize(target_path)
+        offset = max(0, int(offset))
+        limit = max(1, min(int(limit), 20000))
+        
         with open(target_path, "r", encoding="utf-8", errors="ignore") as f:
-            content = f.read(15000)
-            if len(content) >= 15000:
-                return content + "\n\n[Content truncated due to size limit...]"
-            return content
+            f.seek(offset)
+            content = f.read(limit)
+            
+        eof = (offset + len(content)) >= file_size
+        meta = f"[File: {file_path} | Size: {file_size} bytes | Offset: {offset} | Length: {len(content)} | EOF: {eof}]\n---\n"
+        
+        if not eof:
+            content += "\n\n[Content truncated. Use read_file_content with a higher offset to read more...]"
+            
+        return meta + content
     except Exception as e:
         return f"Error reading file: {str(e)}"
+
+def search_file_content(query, pattern="*"):
+    try:
+        import fnmatch
+        matches = []
+        query_lower = query.lower()
+        
+        for root, _, filenames in os.walk(WORKSPACE_DIR):
+            for filename in fnmatch.filter(filenames, pattern):
+                file_path = os.path.join(root, filename)
+                rel_path = os.path.relpath(file_path, WORKSPACE_DIR)
+                
+                try:
+                    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                        for line_num, line in enumerate(f, 1):
+                            if query_lower in line.lower():
+                                matches.append({
+                                    "file": rel_path,
+                                    "line": line_num,
+                                    "content": line.strip()
+                                })
+                                if len(matches) >= 50:
+                                    break
+                except Exception:
+                    pass
+            if len(matches) >= 50:
+                break
+                
+        if not matches:
+            return f"No matches found for query '{query}' in files matching '{pattern}'."
+            
+        output = [f"=== SEARCH RESULTS FOR '{query}' ==="]
+        for m in matches:
+            output.append(f"{m['file']}:{m['line']}: {m['content']}")
+        if len(matches) >= 50:
+            output.append("\n[Truncated... More than 50 results found.]")
+            
+        return "\n".join(output)
+    except Exception as e:
+        return f"Error searching file content: {str(e)}"
 
 def write_file_content(file_path, content):
     if not os.path.isabs(os.path.expanduser(file_path)):
@@ -2306,9 +2358,11 @@ def execute_local_tool(name, args_str):
             return list_directory(path)
         elif name == "read_file_content":
             file_path = kwargs.get("file_path")
+            offset = kwargs.get("offset", 0)
+            limit = kwargs.get("limit", 15000)
             if not file_path:
                 return "Error: Missing required argument 'file_path'."
-            return read_file_content(file_path)
+            return read_file_content(file_path, offset, limit)
         elif name == "write_file_content":
             file_path = kwargs.get("file_path")
             content = kwargs.get("content")
@@ -2503,6 +2557,12 @@ def execute_local_tool(name, args_str):
             if not url:
                 return "Error: Missing required argument 'url'."
             return audit_website_security(url)
+        elif name == "search_file_content":
+            query = kwargs.get("query")
+            pattern = kwargs.get("pattern", "*")
+            if not query:
+                return "Error: Missing required argument 'query'."
+            return search_file_content(query, pattern)
         else:
             return f"Error: Tool '{name}' is not recognized."
     except Exception as e:
