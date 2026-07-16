@@ -1034,6 +1034,12 @@ body.light-mode .tool-execution-header:hover {
     justify-content: center;
 }
 
+.termux-logo-svg {
+    width: 13px;
+    height: 13px;
+    color: var(--accent-primary);
+}
+
 .tool-status-text {
     font-weight: 500;
     color: var(--text-secondary);

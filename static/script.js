@@ -522,7 +522,9 @@ function renderMessages() {
                 toolDiv.innerHTML = `
                     <div class="tool-execution-header" onclick="toggleToolBlock(this)">
                         <div class="tool-status-left">
-                            <span class="tool-status-icon">🔧</span>
+                            <span class="tool-status-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="termux-logo-svg"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                            </span>
                             <span class="tool-status-text">Used tool <code class="tool-code">${escapeHtml(toolName)}</code></span>
                         </div>
                         <span class="tool-toggle-arrow">▶</span>
@@ -538,7 +540,9 @@ function renderMessages() {
                 toolDiv.innerHTML = `
                     <div class="tool-execution-header" ${isRunning ? '' : 'onclick="toggleToolBlock(this)"'}>
                         <div class="tool-status-left">
-                            <span class="tool-status-icon">${isRunning ? '🔄' : '🔧'}</span>
+                            <span class="tool-status-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="termux-logo-svg"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                            </span>
                             <span class="tool-status-text">${isRunning ? 'Running' : 'Used'} tool <code class="tool-code">${escapeHtml(toolName)}</code>${isRunning ? '...' : ''}</span>
                         </div>
                         ${isRunning ? '<span class="tool-status-spinner"></span>' : '<span class="tool-toggle-arrow">▶</span>'}
@@ -564,7 +568,9 @@ function renderMessages() {
             toolDiv.innerHTML = `
                 <div class="tool-execution-header" onclick="toggleToolBlock(this)">
                     <div class="tool-status-left">
-                        <span class="tool-status-icon">📥</span>
+                        <span class="tool-status-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="termux-logo-svg"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                        </span>
                         <span class="tool-status-text">Result from <code class="tool-code">${escapeHtml(toolName)}</code></span>
                     </div>
                     <span class="tool-toggle-arrow">▶</span>
@@ -757,7 +763,9 @@ function parseMarkdown(text) {
             <div class="tool-execution-block collapsed">
                 <div class="tool-execution-header" onclick="toggleToolBlock(this)">
                     <div class="tool-status-left">
-                        <span class="tool-status-icon">🔧</span>
+                        <span class="tool-status-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="termux-logo-svg"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                        </span>
                         <span class="tool-status-text">Used tool <code class="tool-code">${escapeHtml(tool)}</code></span>
                     </div>
                     <span class="tool-toggle-arrow">▶</span>
@@ -780,7 +788,9 @@ function parseMarkdown(text) {
             <div class="tool-execution-block collapsed">
                 <div class="tool-execution-header" onclick="toggleToolBlock(this)">
                     <div class="tool-status-left">
-                        <span class="tool-status-icon">📥</span>
+                        <span class="tool-status-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="termux-logo-svg"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                        </span>
                         <span class="tool-status-text">Result from <code class="tool-code">${escapeHtml(tool)}</code></span>
                     </div>
                     <span class="tool-toggle-arrow">▶</span>
