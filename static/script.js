@@ -496,8 +496,8 @@ function renderMessages() {
             continue;
         }
 
-        const isToolCall = msg.content.startsWith('[TOOL_CALL:');
-        const isToolResult = msg.content.startsWith('[TOOL_RESULT:');
+        const isToolCall = msg.content.trim().startsWith('[TOOL_CALL:');
+        const isToolResult = msg.content.trim().startsWith('[TOOL_RESULT:');
 
         if (isToolCall) {
             const match = msg.content.match(/\[TOOL_CALL:\s*(\w+)\(([\s\S]*?)\)\s*\]/);
@@ -507,7 +507,7 @@ function renderMessages() {
             let nextMsg = (i + 1 < msgs.length) ? msgs[i + 1] : null;
             let toolResultText = null;
             
-            if (nextMsg && nextMsg.content.startsWith('[TOOL_RESULT:')) {
+            if (nextMsg && nextMsg.content.trim().startsWith('[TOOL_RESULT:')) {
                 toolResultText = nextMsg.content;
                 i++; // Consume the result message
             }
