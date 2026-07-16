@@ -980,6 +980,146 @@ body.light-mode .message-bubble pre {
         max-width: 85%;
     }
 }
+/* Tool Execution Block (ChatGPT-style inline tool calling) */
+.tool-execution-block {
+    margin: 0.25rem 0 0.25rem 52px;
+    max-width: calc(75% - 52px);
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
+    overflow: hidden;
+    font-size: 0.85rem;
+    display: flex;
+    flex-direction: column;
+}
+
+body.light-mode .tool-execution-block {
+    background: rgba(0, 0, 0, 0.02);
+    border-color: #e4e4e7;
+}
+
+.message-bubble .tool-execution-block {
+    margin: 0.5rem 0;
+    max-width: 100%;
+}
+
+.tool-execution-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 1rem;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.2s ease;
+}
+
+.tool-execution-header:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+body.light-mode .tool-execution-header:hover {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.tool-status-left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.tool-status-icon {
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tool-status-text {
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+body.light-mode .tool-status-text {
+    color: var(--text-primary);
+}
+
+.tool-code {
+    font-family: monospace;
+    color: var(--accent-primary) !important;
+    background: rgba(var(--accent-primary-rgb), 0.1) !important;
+    padding: 0.1rem 0.35rem !important;
+    border-radius: 4px;
+    border: none !important;
+    font-size: 0.8rem;
+}
+
+.tool-toggle-arrow {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    transition: transform 0.2s ease;
+}
+
+.tool-execution-block.collapsed .tool-toggle-arrow {
+    transform: rotate(0deg);
+}
+
+.tool-execution-block:not(.collapsed) .tool-toggle-arrow {
+    transform: rotate(90deg);
+}
+
+.tool-execution-block.collapsed .tool-execution-result {
+    display: none;
+}
+
+.tool-execution-result {
+    border-top: 1px solid var(--border-glass);
+    background: #09090b;
+    padding: 0.75rem 1rem;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+body.light-mode .tool-execution-result {
+    background: #fafafa;
+    border-top-color: #e4e4e7;
+}
+
+.tool-execution-result pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.tool-execution-result code {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.8rem;
+    color: #a1a1aa;
+}
+
+body.light-mode .tool-execution-result code {
+    color: #3f3f46;
+}
+
+.tool-status-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(var(--accent-primary-rgb), 0.2);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: toolSpin 0.8s linear infinite;
+    display: inline-block;
+}
+
+@keyframes toolSpin {
+    to { transform: rotate(360deg); }
+}
+
+@media (max-width: 768px) {
+    .tool-execution-block {
+        margin-left: 48px;
+        max-width: calc(90% - 48px);
+    }
+}
 
 /* Custom AI Tools UI Elements */
 .tool-call-badge {

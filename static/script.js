@@ -487,26 +487,107 @@ function renderMessages() {
     welcomeScreen.style.display = 'none';
     messagesContainer.innerHTML = '';
 
-    activeChat.messages.forEach(msg => {
-        if (msg.role === 'system') return; // Skip system messages
-
-        const isToolResult = msg.content.startsWith('[TOOL_RESULT:');
-        const isUser = msg.role === 'user' && !isToolResult;
-        
-        const msgDiv = document.createElement('div');
-        if (isToolResult) {
-            msgDiv.className = 'message system-tool-result';
-        } else {
-            msgDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
+    const msgs = activeChat.messages;
+    let i = 0;
+    while (i < msgs.length) {
+        const msg = msgs[i];
+        if (msg.role === 'system') {
+            i++;
+            continue;
         }
 
-        const avatarIcon = isToolResult
-            ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>`
-            : (isUser 
-                ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`
-                : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>`);
+        const isToolCall = msg.content.startsWith('[TOOL_CALL:');
+        const isToolResult = msg.content.startsWith('[TOOL_RESULT:');
 
-        const renderedContent = (isUser && !isToolResult) ? escapeHtml(msg.content) : parseMarkdown(msg.content);
+        if (isToolCall) {
+            const match = msg.content.match(/\[TOOL_CALL:\s*(\w+)\(([\s\S]*?)\)\s*\]/);
+            const toolName = match ? match[1] : 'Tool';
+            
+            // Check if next message is the tool result
+            let nextMsg = (i + 1 < msgs.length) ? msgs[i + 1] : null;
+            let toolResultText = null;
+            
+            if (nextMsg && nextMsg.content.startsWith('[TOOL_RESULT:')) {
+                toolResultText = nextMsg.content;
+                i++; // Consume the result message
+            }
+            
+            const toolDiv = document.createElement('div');
+            toolDiv.className = 'tool-execution-block collapsed';
+            
+            if (toolResultText) {
+                const resultMatch = toolResultText.match(/\[TOOL_RESULT:\s*\w+\s*output\]\n([\s\S]*)/);
+                const rawOutput = resultMatch ? resultMatch[1].trim() : toolResultText;
+                
+                toolDiv.innerHTML = `
+                    <div class="tool-execution-header" onclick="toggleToolBlock(this)">
+                        <div class="tool-status-left">
+                            <span class="tool-status-icon">🔧</span>
+                            <span class="tool-status-text">Used tool <code class="tool-code">${escapeHtml(toolName)}</code></span>
+                        </div>
+                        <span class="tool-toggle-arrow">▶</span>
+                    </div>
+                    <div class="tool-execution-result">
+                        <pre><code>${escapeHtml(rawOutput)}</code></pre>
+                    </div>
+                `;
+            } else {
+                const isRunning = (i === msgs.length - 1) && isGenerating;
+                toolDiv.className = `tool-execution-block collapsed${isRunning ? ' running' : ''}`;
+                
+                toolDiv.innerHTML = `
+                    <div class="tool-execution-header" ${isRunning ? '' : 'onclick="toggleToolBlock(this)"'}>
+                        <div class="tool-status-left">
+                            <span class="tool-status-icon">${isRunning ? '🔄' : '🔧'}</span>
+                            <span class="tool-status-text">${isRunning ? 'Running' : 'Used'} tool <code class="tool-code">${escapeHtml(toolName)}</code>${isRunning ? '...' : ''}</span>
+                        </div>
+                        ${isRunning ? '<span class="tool-status-spinner"></span>' : '<span class="tool-toggle-arrow">▶</span>'}
+                    </div>
+                    ${isRunning ? '' : `
+                    <div class="tool-execution-result">
+                        <pre style="color: var(--text-muted); font-style: italic;">No output recorded</pre>
+                    </div>`}
+                `;
+            }
+            messagesContainer.appendChild(toolDiv);
+            i++;
+            continue;
+        }
+
+        if (isToolResult) {
+            const resultMatch = msg.content.match(/\[TOOL_RESULT:\s*(\w+)\s*output\]\n([\s\S]*)/);
+            const toolName = resultMatch ? resultMatch[1] : 'Tool';
+            const rawOutput = resultMatch ? resultMatch[2].trim() : msg.content;
+            
+            const toolDiv = document.createElement('div');
+            toolDiv.className = 'tool-execution-block collapsed';
+            toolDiv.innerHTML = `
+                <div class="tool-execution-header" onclick="toggleToolBlock(this)">
+                    <div class="tool-status-left">
+                        <span class="tool-status-icon">📥</span>
+                        <span class="tool-status-text">Result from <code class="tool-code">${escapeHtml(toolName)}</code></span>
+                    </div>
+                    <span class="tool-toggle-arrow">▶</span>
+                </div>
+                <div class="tool-execution-result">
+                    <pre><code>${escapeHtml(rawOutput)}</code></pre>
+                </div>
+            `;
+            messagesContainer.appendChild(toolDiv);
+            i++;
+            continue;
+        }
+
+        // Render normal user/assistant message
+        const isUser = msg.role === 'user';
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
+
+        const avatarIcon = isUser 
+            ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`
+            : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>`;
+
+        const renderedContent = isUser ? escapeHtml(msg.content) : parseMarkdown(msg.content);
 
         msgDiv.innerHTML = `
             <div class="message-avatar">
@@ -524,7 +605,16 @@ function renderMessages() {
             </div>
         `;
         messagesContainer.appendChild(msgDiv);
-    });
+        i++;
+    }
+}
+
+// Toggle collapsible tool block output
+function toggleToolBlock(header) {
+    const block = header.closest('.tool-execution-block');
+    if (block) {
+        block.classList.toggle('collapsed');
+    }
 }
 
 // Copy raw message text
@@ -663,21 +753,23 @@ function parseMarkdown(text) {
 
     // 8. Style tool calls and tool outputs
     html = html.replace(/\[TOOL_CALL:\s*(\w+)\(([\s\S]*?)\)\s*\]/g, (match, tool, args) => {
-        const readableArgs = args
-            .replace(/&quot;/g, '"')
-            .replace(/&#39;/g, "'")
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>');
         return `
-            <div class="tool-call-badge">
-                <span class="tool-icon">🔧</span>
-                <span class="tool-label">Executing Tool:</span>
-                <code class="tool-name">${tool}(${readableArgs})</code>
+            <div class="tool-execution-block collapsed">
+                <div class="tool-execution-header" onclick="toggleToolBlock(this)">
+                    <div class="tool-status-left">
+                        <span class="tool-status-icon">🔧</span>
+                        <span class="tool-status-text">Used tool <code class="tool-code">${escapeHtml(tool)}</code></span>
+                    </div>
+                    <span class="tool-toggle-arrow">▶</span>
+                </div>
+                <div class="tool-execution-result">
+                    <pre style="color: var(--text-muted); font-style: italic;">No output recorded</pre>
+                </div>
             </div>
         `;
     });
 
-    html = html.replace(/\[TOOL_RESULT:\s*(\w+)\s*output\]\n([\s\S]*?)(?=(?:<div class="tool-call-badge"|<br><br>|\Z))/g, (match, tool, output) => {
+    html = html.replace(/\[TOOL_RESULT:\s*(\w+)\s*output\]\n([\s\S]*?)(?=(?:<div class="tool-execution-block"|<br><br>|\Z))/g, (match, tool, output) => {
         const cleanOutput = output
             .replace(/<br>/g, '\n')
             .replace(/&quot;/g, '"')
@@ -685,12 +777,17 @@ function parseMarkdown(text) {
             .replace(/&lt;/g, '<')
             .replace(/&gt;/g, '>');
         return `
-            <div class="tool-result-box collapsed">
-                <div class="tool-result-header" onclick="this.parentElement.classList.toggle('collapsed')">
-                    <span class="toggle-icon">▶</span>
-                    <span>📥 System Response [${tool}] (Click to Expand)</span>
+            <div class="tool-execution-block collapsed">
+                <div class="tool-execution-header" onclick="toggleToolBlock(this)">
+                    <div class="tool-status-left">
+                        <span class="tool-status-icon">📥</span>
+                        <span class="tool-status-text">Result from <code class="tool-code">${escapeHtml(tool)}</code></span>
+                    </div>
+                    <span class="tool-toggle-arrow">▶</span>
                 </div>
-                <pre class="tool-result-content"><code>${cleanOutput.trim()}</code></pre>
+                <div class="tool-execution-result">
+                    <pre><code>${cleanOutput.trim()}</code></pre>
+                </div>
             </div>
         `;
     });
