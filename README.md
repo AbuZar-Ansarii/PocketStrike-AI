@@ -62,7 +62,7 @@ Follow these steps to configure your Termux server:
 ### Step 1: Clone and Run the Installer
 Launch Termux and run this one-line command to install all basic dependencies (Python, Git, Flask, Requests, Termux-API, Nmap, Dnsutils, Curl, Net-Tools, Iproute2, and Traceroute):
 ```bash
-git clone https://github.com/AbuZar-Ansarii/PocketStrike-AI.git && cd PocketStrike-AI && sed -i 's/\r$//' install.sh && bash install.sh
+pkg install git git clone https://github.com/AbuZar-Ansarii/PocketStrike-AI.git && cd PocketStrike-AI && sed -i 's/\r$//' install.sh && bash install.sh
 ```
 *Note: During installation, the script will request Android Storage Permissions (`termux-setup-storage`). Tap "Allow" on the system popup.*
 
@@ -102,11 +102,11 @@ PocketStrike AI natively supports the **Model Context Protocol (MCP)** using the
      ```bash
      fastmcp run --host 0.0.0.0 --transport sse your_script.py
      ```
-2. **Retrieve PC IP**: Locate the host PC's local IP address (e.g., `192.168.31.211`).
+2. **Retrieve PC IP**: Locate the host PC's local IP address (e.g., `192.168.11.131`).
 3. **Register on Dashboard**: Open the PocketStrike Web UI on your phone:
    * Tap the **`+`** button in the **MCP Connections** section of the sidebar.
    * Provide a **Server Name** (e.g., `dice-roller`).
-   * Enter the **SSE Endpoint URL** (e.g., `http://192.168.31.211:8000/sse`).
+   * Enter the **SSE Endpoint URL** (e.g., `http://192.168.11.131:8000/sse`).
 4. **Automatic Handshake**: PocketStrike AI will establish an active SSE stream connection, perform the official **initialize/initialized protocol handshake**, fetch the available tools, and automatically inject the remote tool schemas directly into the AI's instruction set.
 5. **Real-time Execution**: When the AI runs a remote tool, the request is wrapped in a standard JSON-RPC 2.0 structure, POSTed over the Wi-Fi network, and the result is returned live to the chat thread!
 
