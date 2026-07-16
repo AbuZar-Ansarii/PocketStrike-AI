@@ -3,7 +3,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Termux%20%7C%20Android-green?style=for-the-badge&logo=android" alt="Platform" />
   <img src="https://img.shields.io/badge/Language-Python%20%7C%20JS-blue?style=for-the-badge&logo=python" alt="Languages" />
-  <img src="https://img.shields.io/badge/Tools-52%20Built--in-purple?style=for-the-badge" alt="Tools" />
+  <img src="https://img.shields.io/badge/Tools-52%20Built--in%20+%20MCP-purple?style=for-the-badge" alt="Tools" />
   <img src="https://img.shields.io/badge/License-MIT-orange?style=for-the-badge" alt="License" />
 </p>
 
