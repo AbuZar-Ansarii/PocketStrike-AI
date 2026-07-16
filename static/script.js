@@ -512,48 +512,58 @@ function renderMessages() {
                 i++; // Consume the result message
             }
             
-            const toolDiv = document.createElement('div');
-            toolDiv.className = 'tool-execution-block collapsed';
+            const toolMessageDiv = document.createElement('div');
+            toolMessageDiv.className = 'message system-tool';
             
+            const avatarHtml = `
+                <div class="message-avatar">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="termux-logo-svg"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                </div>
+            `;
+            
+            let blockHtml = '';
             if (toolResultText) {
                 const resultMatch = toolResultText.match(/\[TOOL_RESULT:\s*\w+\s*output\]\n([\s\S]*)/);
                 const rawOutput = resultMatch ? resultMatch[1].trim() : toolResultText;
                 
-                toolDiv.innerHTML = `
-                    <div class="tool-execution-header" onclick="toggleToolBlock(this)">
-                        <div class="tool-status-left">
-                            <span class="tool-status-icon">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="termux-logo-svg"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-                            </span>
-                            <span class="tool-status-text">Used tool <code class="tool-code">${escapeHtml(toolName)}</code></span>
+                blockHtml = `
+                    <div class="tool-execution-block collapsed">
+                        <div class="tool-execution-header" onclick="toggleToolBlock(this)">
+                            <div class="tool-status-left">
+                                <span class="tool-status-text">Used tool <code class="tool-code">${escapeHtml(toolName)}</code></span>
+                            </div>
+                            <span class="tool-toggle-arrow">▶</span>
                         </div>
-                        <span class="tool-toggle-arrow">▶</span>
-                    </div>
-                    <div class="tool-execution-result">
-                        <pre><code>${escapeHtml(rawOutput)}</code></pre>
+                        <div class="tool-execution-result">
+                            <pre><code>${escapeHtml(rawOutput)}</code></pre>
+                        </div>
                     </div>
                 `;
             } else {
                 const isRunning = (i === msgs.length - 1) && isGenerating;
-                toolDiv.className = `tool-execution-block collapsed${isRunning ? ' running' : ''}`;
-                
-                toolDiv.innerHTML = `
-                    <div class="tool-execution-header" ${isRunning ? '' : 'onclick="toggleToolBlock(this)"'}>
-                        <div class="tool-status-left">
-                            <span class="tool-status-icon">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="termux-logo-svg"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-                            </span>
-                            <span class="tool-status-text">${isRunning ? 'Running' : 'Used'} tool <code class="tool-code">${escapeHtml(toolName)}</code>${isRunning ? '...' : ''}</span>
+                blockHtml = `
+                    <div class="tool-execution-block collapsed${isRunning ? ' running' : ''}">
+                        <div class="tool-execution-header" ${isRunning ? '' : 'onclick="toggleToolBlock(this)"'}>
+                            <div class="tool-status-left">
+                                <span class="tool-status-text">${isRunning ? 'Running' : 'Used'} tool <code class="tool-code">${escapeHtml(toolName)}</code>${isRunning ? '...' : ''}</span>
+                            </div>
+                            ${isRunning ? '<span class="tool-status-spinner"></span>' : '<span class="tool-toggle-arrow">▶</span>'}
                         </div>
-                        ${isRunning ? '<span class="tool-status-spinner"></span>' : '<span class="tool-toggle-arrow">▶</span>'}
+                        ${isRunning ? '' : `
+                        <div class="tool-execution-result">
+                            <pre style="color: var(--text-muted); font-style: italic;">No output recorded</pre>
+                        </div>`}
                     </div>
-                    ${isRunning ? '' : `
-                    <div class="tool-execution-result">
-                        <pre style="color: var(--text-muted); font-style: italic;">No output recorded</pre>
-                    </div>`}
                 `;
             }
-            messagesContainer.appendChild(toolDiv);
+            
+            toolMessageDiv.innerHTML = `
+                ${avatarHtml}
+                <div class="message-content-wrapper" style="width: 100%;">
+                    ${blockHtml}
+                </div>
+            `;
+            messagesContainer.appendChild(toolMessageDiv);
             i++;
             continue;
         }
@@ -563,23 +573,32 @@ function renderMessages() {
             const toolName = resultMatch ? resultMatch[1] : 'Tool';
             const rawOutput = resultMatch ? resultMatch[2].trim() : msg.content;
             
-            const toolDiv = document.createElement('div');
-            toolDiv.className = 'tool-execution-block collapsed';
-            toolDiv.innerHTML = `
-                <div class="tool-execution-header" onclick="toggleToolBlock(this)">
-                    <div class="tool-status-left">
-                        <span class="tool-status-icon">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="termux-logo-svg"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-                        </span>
-                        <span class="tool-status-text">Result from <code class="tool-code">${escapeHtml(toolName)}</code></span>
-                    </div>
-                    <span class="tool-toggle-arrow">▶</span>
-                </div>
-                <div class="tool-execution-result">
-                    <pre><code>${escapeHtml(rawOutput)}</code></pre>
+            const toolMessageDiv = document.createElement('div');
+            toolMessageDiv.className = 'message system-tool';
+            
+            const avatarHtml = `
+                <div class="message-avatar">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="termux-logo-svg"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
                 </div>
             `;
-            messagesContainer.appendChild(toolDiv);
+            
+            toolMessageDiv.innerHTML = `
+                ${avatarHtml}
+                <div class="message-content-wrapper" style="width: 100%;">
+                    <div class="tool-execution-block collapsed">
+                        <div class="tool-execution-header" onclick="toggleToolBlock(this)">
+                            <div class="tool-status-left">
+                                <span class="tool-status-text">Result from <code class="tool-code">${escapeHtml(toolName)}</code></span>
+                            </div>
+                            <span class="tool-toggle-arrow">▶</span>
+                        </div>
+                        <div class="tool-execution-result">
+                            <pre><code>${escapeHtml(rawOutput)}</code></pre>
+                        </div>
+                    </div>
+                </div>
+            `;
+            messagesContainer.appendChild(toolMessageDiv);
             i++;
             continue;
         }

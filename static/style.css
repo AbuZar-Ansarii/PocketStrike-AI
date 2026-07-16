@@ -982,8 +982,8 @@ body.light-mode .message-bubble pre {
 }
 /* Tool Execution Block (ChatGPT-style inline tool calling) */
 .tool-execution-block {
-    margin: 0.25rem 0 0.25rem 52px;
-    max-width: calc(75% - 52px);
+    margin: 0;
+    width: 100%;
     background: rgba(255, 255, 255, 0.02);
     border: 1px solid var(--border-glass);
     border-radius: 12px;
@@ -1001,6 +1001,41 @@ body.light-mode .tool-execution-block {
 .message-bubble .tool-execution-block {
     margin: 0.5rem 0;
     max-width: 100%;
+}
+
+/* System Tool Message Layout (Avatar outside container) */
+.message.system-tool {
+    display: flex;
+    gap: 1rem;
+    width: 100%;
+    animation: messageSlideIn 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+.message.system-tool .message-avatar {
+    background: #1c1917;
+    border: 1px solid #78716c;
+    flex-shrink: 0;
+}
+
+body.light-mode .message.system-tool .message-avatar {
+    background: #f5f5f4;
+    border-color: #d6d3d1;
+}
+
+.message.system-tool .message-avatar svg {
+    color: #a8a29e;
+    width: 18px;
+    height: 18px;
+}
+
+body.light-mode .message.system-tool .message-avatar svg {
+    color: #78716c;
+}
+
+.message.system-tool .tool-execution-block {
+    margin: 0;
+    max-width: 100%;
+    width: 100%;
 }
 
 .tool-execution-header {
@@ -1118,13 +1153,6 @@ body.light-mode .tool-execution-result code {
 
 @keyframes toolSpin {
     to { transform: rotate(360deg); }
-}
-
-@media (max-width: 768px) {
-    .tool-execution-block {
-        margin-left: 48px;
-        max-width: calc(90% - 48px);
-    }
 }
 
 /* Custom AI Tools UI Elements */
