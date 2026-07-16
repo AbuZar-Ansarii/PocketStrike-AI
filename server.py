@@ -3452,7 +3452,6 @@ def call_remote_mcp_tool(base_url, tool_name, arguments):
 # Telegram Bot Polling Thread
 def telegram_bot_loop(token):
     offset = 0
-    sessions = load_telegram_sessions()
     print(f"Telegram Bot started polling...")
     
     while True:
