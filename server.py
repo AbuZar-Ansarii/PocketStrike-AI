@@ -1065,10 +1065,10 @@ def take_camera_photo(camera_id="0"):
 def get_phone_location():
     try:
         import subprocess
-        res = subprocess.run(["termux-location"], capture_output=True, text=True, timeout=10)
+        res = subprocess.run(["termux-location", "-p", "network"], capture_output=True, text=True, timeout=10)
         if res.returncode == 0:
             return res.stdout
-        return f"Error getting location: {res.stderr} (Ensure GPS location permissions are granted)"
+        return f"Error getting location: {res.stderr} (Ensure GPS location permissions are granted and Location services are enabled)"
     except Exception as e:
         return f"Error executing location tool: {str(e)}"
 
