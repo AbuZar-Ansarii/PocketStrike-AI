@@ -692,6 +692,78 @@ function parseMarkdown(text) {
 
     let html = text;
 
+    // 0. Parse Tool Blocks [TOOL_CALL:...] and [TOOL_RESULT:...]
+    const toolBlocks = [];
+    
+    // 0a. Match combined TOOL_CALL and TOOL_RESULT
+    html = html.replace(/\[TOOL_CALL:\s*(\w+)\(([\s\S]*?)\)\s*\][\s\r\n]*\[TOOL_RESULT:\s*\1\s*output\]\n?([\s\S]*?)(?=(?:\[TOOL_CALL:|\[TOOL_RESULT:|\Z))/g, (match, tool, args, output) => {
+        const placeholder = `__TOOL_COMBINED_PLACEHOLDER_${toolBlocks.length}__`;
+        const blockHtml = `
+            <div class="tool-execution-block collapsed">
+                <div class="tool-execution-header" onclick="toggleToolBlock(this)">
+                    <div class="tool-status-left">
+                        <span class="tool-status-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="termux-logo-svg"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                        </span>
+                        <span class="tool-status-text">Used tool <code class="tool-code">${escapeHtml(tool)}</code></span>
+                    </div>
+                    <span class="tool-toggle-arrow">▶</span>
+                </div>
+                <div class="tool-execution-result">
+                    <pre><code>${escapeHtml(output.trim())}</code></pre>
+                </div>
+            </div>
+        `;
+        toolBlocks.push(blockHtml);
+        return placeholder;
+    });
+
+    // 0b. Match individual TOOL_CALL (if result hasn't arrived yet)
+    html = html.replace(/\[TOOL_CALL:\s*(\w+)\(([\s\S]*?)\)\s*\]/g, (match, tool, args) => {
+        const placeholder = `__TOOL_CALL_PLACEHOLDER_${toolBlocks.length}__`;
+        const blockHtml = `
+            <div class="tool-execution-block collapsed">
+                <div class="tool-execution-header" onclick="toggleToolBlock(this)">
+                    <div class="tool-status-left">
+                        <span class="tool-status-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="termux-logo-svg"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                        </span>
+                        <span class="tool-status-text">Used tool <code class="tool-code">${escapeHtml(tool)}</code></span>
+                    </div>
+                    <span class="tool-toggle-arrow">▶</span>
+                </div>
+                <div class="tool-execution-result">
+                    <pre style="color: var(--text-muted); font-style: italic;">No output recorded</pre>
+                </div>
+            </div>
+        `;
+        toolBlocks.push(blockHtml);
+        return placeholder;
+    });
+
+    // 0c. Match individual TOOL_RESULT (if orphaned or streaming separately)
+    html = html.replace(/\[TOOL_RESULT:\s*(\w+)\s*output\]\n?([\s\S]*?)(?=(?:\[TOOL_CALL:|\[TOOL_RESULT:|\Z))/g, (match, tool, output) => {
+        const placeholder = `__TOOL_RESULT_PLACEHOLDER_${toolBlocks.length}__`;
+        const blockHtml = `
+            <div class="tool-execution-block collapsed">
+                <div class="tool-execution-header" onclick="toggleToolBlock(this)">
+                    <div class="tool-status-left">
+                        <span class="tool-status-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="termux-logo-svg"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                        </span>
+                        <span class="tool-status-text">Result from <code class="tool-code">${escapeHtml(tool)}</code></span>
+                    </div>
+                    <span class="tool-toggle-arrow">▶</span>
+                </div>
+                <div class="tool-execution-result">
+                    <pre><code>${escapeHtml(output.trim())}</code></pre>
+                </div>
+            </div>
+        `;
+        toolBlocks.push(blockHtml);
+        return placeholder;
+    });
+
     // 1. Parse Code Blocks ```code```
     // Store blocks to prevent parsing inside them later
     const codeBlocks = [];
@@ -710,7 +782,7 @@ function parseMarkdown(text) {
 
     // 2. Escape HTML outside of placeholders to prevent rendering arbitrary tags
     // First let's identify the placeholders so we don't escape them
-    const placeholderRegex = /__CODE_BLOCK_PLACEHOLDER_\d+__/g;
+    const placeholderRegex = /__(CODE_BLOCK|TOOL_COMBINED|TOOL_CALL|TOOL_RESULT)_PLACEHOLDER_\d+__/g;
     const segments = html.split(placeholderRegex);
     const matches = html.match(placeholderRegex) || [];
     
@@ -736,7 +808,7 @@ function parseMarkdown(text) {
     for (let i = 0; i < lines.length; i++) {
         let line = lines[i].trim();
         // Check if line starts with placeholder - don't process as list
-        if (line.startsWith('__CODE_BLOCK_PLACEHOLDER_')) continue;
+        if (line.startsWith('__CODE_BLOCK_PLACEHOLDER_') || line.startsWith('__TOOL_')) continue;
 
         if (line.startsWith('- ') || line.startsWith('* ')) {
             const listContent = line.substring(2);
@@ -762,7 +834,7 @@ function parseMarkdown(text) {
     // Splitting by lines is cleaner
     html = html.split('\n').map(line => {
         // If it starts with list tags or header or placeholder, keep as is
-        if (line.match(/^<\/?(ul|li|pre|code|div)/) || line.includes('__CODE_BLOCK_PLACEHOLDER_')) {
+        if (line.match(/^<\/?(ul|li|pre|code|div)/) || line.includes('_PLACEHOLDER_')) {
             return line;
         }
         return line + '<br>';
@@ -776,50 +848,12 @@ function parseMarkdown(text) {
         html = html.replace(`__CODE_BLOCK_PLACEHOLDER_${i}__`, codeBlocks[i]);
     }
 
-    // 8. Style tool calls and tool outputs
-    html = html.replace(/\[TOOL_CALL:\s*(\w+)\(([\s\S]*?)\)\s*\]/g, (match, tool, args) => {
-        return `
-            <div class="tool-execution-block collapsed">
-                <div class="tool-execution-header" onclick="toggleToolBlock(this)">
-                    <div class="tool-status-left">
-                        <span class="tool-status-icon">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="termux-logo-svg"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-                        </span>
-                        <span class="tool-status-text">Used tool <code class="tool-code">${escapeHtml(tool)}</code></span>
-                    </div>
-                    <span class="tool-toggle-arrow">▶</span>
-                </div>
-                <div class="tool-execution-result">
-                    <pre style="color: var(--text-muted); font-style: italic;">No output recorded</pre>
-                </div>
-            </div>
-        `;
-    });
-
-    html = html.replace(/\[TOOL_RESULT:\s*(\w+)\s*output\]\n([\s\S]*?)(?=(?:<div class="tool-execution-block"|<br><br>|\Z))/g, (match, tool, output) => {
-        const cleanOutput = output
-            .replace(/<br>/g, '\n')
-            .replace(/&quot;/g, '"')
-            .replace(/&#39;/g, "'")
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>');
-        return `
-            <div class="tool-execution-block collapsed">
-                <div class="tool-execution-header" onclick="toggleToolBlock(this)">
-                    <div class="tool-status-left">
-                        <span class="tool-status-icon">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="termux-logo-svg"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-                        </span>
-                        <span class="tool-status-text">Result from <code class="tool-code">${escapeHtml(tool)}</code></span>
-                    </div>
-                    <span class="tool-toggle-arrow">▶</span>
-                </div>
-                <div class="tool-execution-result">
-                    <pre><code>${cleanOutput.trim()}</code></pre>
-                </div>
-            </div>
-        `;
-    });
+    // 8. Re-inject Tool Blocks
+    for (let i = 0; i < toolBlocks.length; i++) {
+        html = html.replace(`__TOOL_COMBINED_PLACEHOLDER_${i}__`, toolBlocks[i]);
+        html = html.replace(`__TOOL_CALL_PLACEHOLDER_${i}__`, toolBlocks[i]);
+        html = html.replace(`__TOOL_RESULT_PLACEHOLDER_${i}__`, toolBlocks[i]);
+    }
 
     return html;
 }
