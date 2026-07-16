@@ -253,7 +253,9 @@ Available Tools:
 49. audit_website_security(url)
     Inspects a web domain or local server URL for SSL/TLS certificate validity (expiration date, issuer) and evaluates the presence of critical security headers (HSTS, CSP, X-Frame-Options, XSS protection).
 50. search_file_content(query, pattern="*")
-    Searches recursively for a text query inside all files in the workspace (optionally filtered by a glob pattern like '*.py' or '*.txt'). Returns matching line numbers and contents.{mcp_tools_block}
+    Searches recursively for a text query inside all files in the workspace (optionally filtered by a glob pattern like '*.py' or '*.txt'). Returns matching line numbers and contents.
+51. delete_file(file_path)
+    Deletes a file or recursively deletes a directory inside your workspace directory.{mcp_tools_block}
 
 Instructions:
 - When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
@@ -641,10 +643,14 @@ def write_file_content(file_path, content):
     if not real_target.startswith(real_workspace):
         return f"Error: Write access denied. You are only allowed to write files inside your workspace: {WORKSPACE_DIR}"
         
-    # Prevent touching main codebase files specifically by name (extra safety check)
-    forbidden_files = ["server.py", "setup.py", "launch.sh", "install.sh", "config.json"]
-    if os.path.basename(real_target) in forbidden_files:
-        return f"Error: Editing critical system files ({os.path.basename(real_target)}) is forbidden to prevent server crash."
+    # Prevent overwriting actual running system files in the project root folder
+    real_project = os.path.realpath(os.path.abspath(os.path.dirname(__file__)))
+    forbidden_paths = [
+        os.path.realpath(os.path.join(real_project, f))
+        for f in ["server.py", "setup.py", "launch.sh", "install.sh", "config.json"]
+    ]
+    if real_target in forbidden_paths:
+        return f"Error: Editing critical active system files in the project folder is forbidden to prevent server crash."
         
     try:
         os.makedirs(os.path.dirname(real_target), exist_ok=True)
@@ -653,6 +659,43 @@ def write_file_content(file_path, content):
         return f"Success: File '{file_path}' written successfully."
     except Exception as e:
         return f"Error writing file: {str(e)}"
+
+def delete_file(file_path):
+    if not os.path.isabs(os.path.expanduser(file_path)):
+        target_path = os.path.abspath(os.path.join(WORKSPACE_DIR, file_path))
+    else:
+        target_path = os.path.abspath(os.path.expanduser(file_path))
+        
+    real_target = os.path.realpath(target_path)
+    real_workspace = os.path.realpath(WORKSPACE_DIR)
+    
+    if not real_target.startswith(real_workspace):
+        return f"Error: Access denied. You are only allowed to delete files inside your workspace: {WORKSPACE_DIR}"
+        
+    if not os.path.exists(real_target):
+        return f"Error: File '{file_path}' does not exist."
+        
+    # Prevent deleting active system files in the project root folder
+    real_project = os.path.realpath(os.path.abspath(os.path.dirname(__file__)))
+    forbidden_paths = [
+        os.path.realpath(os.path.join(real_project, f))
+        for f in ["server.py", "setup.py", "launch.sh", "install.sh", "config.json"]
+    ]
+    if real_target in forbidden_paths:
+        return f"Error: Deleting critical system files in the project folder is forbidden."
+        
+    if os.path.isdir(real_target):
+        try:
+            shutil.rmtree(real_target)
+            return f"Success: Directory '{file_path}' and all its contents deleted successfully."
+        except Exception as e:
+            return f"Error deleting directory: {str(e)}"
+    else:
+        try:
+            os.remove(real_target)
+            return f"Success: File '{file_path}' deleted successfully."
+        except Exception as e:
+            return f"Error deleting file: {str(e)}"
 
 def run_python_script(script_name, args=None):
     if not args:
@@ -2450,6 +2493,11 @@ def execute_local_tool(name, args_str):
             if not file_path or content is None:
                 return "Error: Missing required arguments 'file_path' and/or 'content'."
             return write_file_content(file_path, content)
+        elif name == "delete_file":
+            file_path = kwargs.get("file_path")
+            if not file_path:
+                return "Error: Missing required argument 'file_path'."
+            return delete_file(file_path)
         elif name == "run_python_script":
             script_name = kwargs.get("script_name")
             args = kwargs.get("args")
