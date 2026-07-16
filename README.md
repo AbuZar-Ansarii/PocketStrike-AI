@@ -59,8 +59,8 @@ cd ~/PocketStrike-AI && bash launch.sh
 
 Follow these steps to configure your Termux server:
 
-### Step 1: Install git in termux
-run this command to install git 
+### Step 1: Install Git in Termux
+Run this command to install git 
 ```
 pkg install git
 ```
