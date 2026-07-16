@@ -3,7 +3,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Termux%20%7C%20Android-green?style=for-the-badge&logo=android" alt="Platform" />
   <img src="https://img.shields.io/badge/Language-Python%20%7C%20JS-blue?style=for-the-badge&logo=python" alt="Languages" />
-  <img src="https://img.shields.io/badge/Tools-50%20Built--in-purple?style=for-the-badge" alt="Tools" />
+  <img src="https://img.shields.io/badge/Tools-52%20Built--in-purple?style=for-the-badge" alt="Tools" />
   <img src="https://img.shields.io/badge/License-MIT-orange?style=for-the-badge" alt="License" />
 </p>
 
@@ -190,3 +190,5 @@ PocketStrike AI has access to **50 built-in local tools** to audit, crawl, and c
 | 48 | `audit_vpn_connection()` | Audits public IP/ISP and checks local interface tables for VPN leaks. |
 | 49 | `audit_website_security(url)`| Audits HTTP security headers and queries SSL handshake validity parameters. |
 | 50 | `search_file_content(q, pat)`| Recursively searches text inside all workspace files matching a glob filter. |
+| 51 | `delete_file(file_path)` | Deletes a file or recursively deletes a directory inside your workspace directory. |
+| 52 | `download_file(url, file_name)` | Downloads a file (binary or text, like images, scripts, security payloads) from a web URL and saves it directly in your workspace directory. |

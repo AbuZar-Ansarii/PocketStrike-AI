@@ -255,7 +255,9 @@ Available Tools:
 50. search_file_content(query, pattern="*")
     Searches recursively for a text query inside all files in the workspace (optionally filtered by a glob pattern like '*.py' or '*.txt'). Returns matching line numbers and contents.
 51. delete_file(file_path)
-    Deletes a file or recursively deletes a directory inside your workspace directory.{mcp_tools_block}
+    Deletes a file or recursively deletes a directory inside your workspace directory.
+52. download_file(url, file_name)
+    Downloads a file (binary or text, like images, scripts, security payloads) from a web URL and saves it directly in your workspace directory.{mcp_tools_block}
 
 Instructions:
 - When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
@@ -1583,6 +1585,41 @@ def fetch_url(url):
     except Exception as e:
         return f"Error fetching URL: {str(e)}"
 
+def download_file(url, file_name):
+    try:
+        if not url.startswith("http://") and not url.startswith("https://"):
+            url = "https://" + url
+            
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        res = requests.get(url, headers=headers, timeout=30, stream=True)
+        if res.status_code != 200:
+            return f"Error: File download failed (Status {res.status_code})."
+            
+        # Ensure target file name resolves inside workspace to maintain sandboxing
+        target_path = os.path.abspath(os.path.join(WORKSPACE_DIR, file_name))
+        real_target = os.path.realpath(target_path)
+        real_workspace = os.path.realpath(WORKSPACE_DIR)
+        
+        if not real_target.startswith(real_workspace):
+            return f"Error: Write access denied. You can only download files inside your workspace: {WORKSPACE_DIR}"
+            
+        # Prevent touching main codebase files specifically by name (extra safety check)
+        forbidden_files = ["server.py", "setup.py", "launch.sh", "install.sh", "config.json"]
+        if os.path.basename(real_target) in forbidden_files:
+            return f"Error: Downloading files with critical names is restricted to prevent overwriting active codebase."
+            
+        os.makedirs(os.path.dirname(real_target), exist_ok=True)
+        with open(real_target, "wb") as f:
+            for chunk in res.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+                    
+        return f"Success: File downloaded successfully and saved as '{file_name}' inside workspace."
+    except Exception as e:
+        return f"Error downloading file: {str(e)}"
+
 def get_network_details():
     details = {}
     try:
@@ -2519,6 +2556,12 @@ def execute_local_tool(name, args_str):
             if not url:
                 return "Error: Missing required argument 'url'."
             return fetch_url(url)
+        elif name == "download_file":
+            url = kwargs.get("url")
+            file_name = kwargs.get("file_name")
+            if not url or not file_name:
+                return "Error: Missing required arguments 'url' and/or 'file_name'."
+            return download_file(url, file_name)
         elif name == "get_network_details":
             return get_network_details()
         elif name == "list_local_listeners":
