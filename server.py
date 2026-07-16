@@ -3007,6 +3007,25 @@ def save_unified_history(history):
     except Exception as e:
         print(f"Error saving unified history: {e}")
 
+def load_conversations():
+    conv_file = os.path.join(WORKSPACE_DIR, "conversations.json")
+    if os.path.exists(conv_file):
+        try:
+            with open(conv_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Error loading conversations.json: {e}")
+    return []
+
+def save_conversations(conversations):
+    conv_file = os.path.join(WORKSPACE_DIR, "conversations.json")
+    try:
+        os.makedirs(os.path.dirname(conv_file), exist_ok=True)
+        with open(conv_file, "w", encoding="utf-8") as f:
+            json.dump(conversations, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"Error saving conversations.json: {e}")
+
 def register_telegram_chat(chat_id):
     chats_file = os.path.join(WORKSPACE_DIR, "telegram_active_chats.json")
     chats = []
@@ -3498,22 +3517,50 @@ def remove_mcp_server():
 
 @app.route('/api/history/load', methods=['GET'])
 def load_history():
-    messages = load_unified_history()
-    return jsonify([
-        {
+    conversations = load_conversations()
+    unified_messages = load_unified_history()
+    
+    # Find default conversation
+    default_conv = None
+    for c in conversations:
+        if c.get("id") == "default":
+            default_conv = c
+            break
+            
+    if default_conv:
+        default_conv["messages"] = unified_messages
+    else:
+        # Create default if not exists
+        default_conv = {
             "id": "default",
             "title": "PocketStrike AI Unified Chat",
-            "messages": messages
+            "messages": unified_messages
         }
-    ])
+        conversations.append(default_conv)
+        
+    return jsonify(conversations)
 
 @app.route('/api/history/sync', methods=['POST'])
 def sync_history():
     data = request.json or []
-    if data and isinstance(data, list) and len(data) > 0:
-        first_chat = data[0]
-        if isinstance(first_chat, dict) and "messages" in first_chat:
-            save_unified_history(first_chat["messages"])
+    if isinstance(data, list):
+        # Save all conversations to conversations.json
+        save_conversations(data)
+        
+        # Sync the default conversation to unified_history.json for Telegram
+        default_messages = None
+        for c in data:
+            if c.get("id") == "default":
+                default_messages = c.get("messages", [])
+                break
+        
+        if default_messages is None and len(data) > 0:
+            # Fallback to first chat if default not found
+            default_messages = data[0].get("messages", [])
+            
+        if default_messages is not None:
+            save_unified_history(default_messages)
+            
     return jsonify({"status": "success"})
 
 @app.route('/')
