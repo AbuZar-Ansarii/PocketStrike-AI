@@ -64,12 +64,12 @@ def get_android_workspace():
     ]
     for p in paths:
         try:
-            # Check if parent is writable/exists, or try making the dir
-            parent = os.path.dirname(p)
-            if os.path.exists(parent) and os.access(parent, os.W_OK):
-                os.makedirs(p, exist_ok=True)
-                return os.path.abspath(p)
             os.makedirs(p, exist_ok=True)
+            # Test write access by writing a dummy file
+            test_file = os.path.join(p, ".write_test")
+            with open(test_file, "w") as f:
+                f.write("test")
+            os.remove(test_file)
             return os.path.abspath(p)
         except Exception:
             continue
@@ -134,10 +134,9 @@ def get_system_prompt():
 Current local time and date: {current_time}
 You are a self-evolving AI agent: you can grow, learn, and expand your capabilities over time by writing scripts, learning new rules, and persisting your memory.
 
-Your workspace directory is: {WORKSPACE_DIR} (located in the phone's internal storage).
-Your project root directory is: {os.path.abspath(os.path.dirname(__file__))} (where your codebase is).
-All file tools (list_directory, read_file_content, write_file_content, run_python_script) can manage files in both directories. You are allowed to create, read, and edit scripts (.py, .sh, .txt, etc.) in both locations.
-Critical: You are forbidden from modifying or deleting your own core system configuration/code files (server.py, setup.py, launch.sh, install.sh, config.json) to prevent messing with your own running codebase.
+Your workspace directory is: {WORKSPACE_DIR} (located in the phone's internal storage). Always save files requested by the user inside this folder.
+Your project root directory is: {os.path.abspath(os.path.dirname(__file__))} (where your codebase lives). You are allowed to read code files here to explain them, but write access is strictly denied to keep this folder safe from modification.
+Critical: You are strictly sandboxed. All write operations (write_file_content) are only allowed inside your workspace directory ({WORKSPACE_DIR}). You are forbidden from writing files in your project root or modifying your own running server code.
 
 AI PERSISTENT MEMORY (Stored locally and privately on user's device):
 You are a privacy-focused, self-evolving AI. You must actively maintain a deep understanding of the user.
@@ -163,7 +162,7 @@ Available Tools:
 4. read_file_content(file_path, offset=0, limit=15000)
    Reads the content of a text file inside your workspace directory or project root directory. Supports paging via 'offset' and 'limit' parameters for large files.
 5. write_file_content(file_path, content)
-   Creates or overwrites a file inside your workspace directory or project root directory (excluding core system configuration/code files).
+   Creates or overwrites a file inside your workspace directory. Useful for saving Python scripts or files (like 'memory.json' and 'instructions.txt').
 6. run_python_script(script_name, args=[...])
    Runs a Python script written by you inside your workspace directory and returns its output. Use this to run custom scripts, write new tools, or build calculations.
 7. execute_termux_command(command)
@@ -630,22 +629,17 @@ def search_file_content(query, pattern="*"):
         return f"Error searching file content: {str(e)}"
 
 def write_file_content(file_path, content):
-    real_project = os.path.realpath(os.path.abspath(os.path.dirname(__file__)))
-    real_workspace = os.path.realpath(WORKSPACE_DIR)
-    
     if not os.path.isabs(os.path.expanduser(file_path)):
         target_path = os.path.abspath(os.path.join(WORKSPACE_DIR, file_path))
-        if not os.path.realpath(target_path).startswith(real_workspace):
-            target_path = os.path.abspath(os.path.join(real_project, file_path))
     else:
         target_path = os.path.abspath(os.path.expanduser(file_path))
         
+    # Security Sandbox Check: Prevent path traversal or writing outside the workspace directory
     real_target = os.path.realpath(target_path)
-    is_inside_workspace = real_target.startswith(real_workspace)
-    is_inside_project = real_target.startswith(real_project)
+    real_workspace = os.path.realpath(WORKSPACE_DIR)
     
-    if not (is_inside_workspace or is_inside_project):
-        return f"Error: Write access denied. You are only allowed to write files inside your workspace ({WORKSPACE_DIR}) or project directory ({real_project})."
+    if not real_target.startswith(real_workspace):
+        return f"Error: Write access denied. You are only allowed to write files inside your workspace: {WORKSPACE_DIR}"
         
     # Prevent touching main codebase files specifically by name (extra safety check)
     forbidden_files = ["server.py", "setup.py", "launch.sh", "install.sh", "config.json"]
