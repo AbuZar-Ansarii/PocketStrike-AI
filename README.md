@@ -59,10 +59,15 @@ cd ~/PocketStrike-AI && bash launch.sh
 
 Follow these steps to configure your Termux server:
 
-### Step 1: Clone and Run the Installer
+### Step 1: Install git in termux
+run this command to install git 
+```
+pkg install git
+```
+### Step 2: Clone and Run the Installer
 Launch Termux and run this one-line command to install all basic dependencies (Python, Git, Flask, Requests, Termux-API, Nmap, Dnsutils, Curl, Net-Tools, Iproute2, and Traceroute):
 ```bash
-pkg install git git clone https://github.com/AbuZar-Ansarii/PocketStrike-AI.git && cd PocketStrike-AI && sed -i 's/\r$//' install.sh && bash install.sh
+git clone https://github.com/AbuZar-Ansarii/PocketStrike-AI.git && cd PocketStrike-AI && sed -i 's/\r$//' install.sh && bash install.sh
 ```
 *Note: During installation, the script will request Android Storage Permissions (`termux-setup-storage`). Tap "Allow" on the system popup.*
 
@@ -74,7 +79,7 @@ pkg install git git clone https://github.com/AbuZar-Ansarii/PocketStrike-AI.git 
 > ```
 > If Termux is completely locked, uninstall your current version and download the official updated build from **F-Droid** or **GitHub Releases**.
 
-### Step 2: Configure Setup Wizard
+### Step 3: Configure Setup Wizard
 Run the launcher:
 ```bash
 bash launch.sh
@@ -88,7 +93,7 @@ bash launch.sh
    *   **OpenRouter** & **Custom APIs** (compatible with OpenAI format)
 3. Select whether to enable **Telegram Bot integration** (requires your Bot Token and Chat ID).
 
-### Step 3: Run the Server
+### Step 4: Run the Server
 Choose option `2` from the launcher. Open the **Local URL** in your phone's browser or the **Network URL** on your PC to start chatting!
 
 ---
