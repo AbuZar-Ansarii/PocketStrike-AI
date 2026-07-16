@@ -134,9 +134,10 @@ def get_system_prompt():
 Current local time and date: {current_time}
 You are a self-evolving AI agent: you can grow, learn, and expand your capabilities over time by writing scripts, learning new rules, and persisting your memory.
 
-Your workspace directory is: {WORKSPACE_DIR} (which is located in the phone's internal storage).
-All file tools (list_directory, read_file_content, write_file_content, run_python_script) resolve relative paths inside this workspace directory. Always write/save files requested by the user inside this workspace folder.
-Critical: You are forbidden from modifying, writing, or deleting files outside this workspace directory, especially the server's own scripts (server.py, setup.py, launch.sh, etc.) to prevent messing with your own running code.
+Your workspace directory is: {WORKSPACE_DIR} (located in the phone's internal storage).
+Your project root directory is: {os.path.abspath(os.path.dirname(__file__))} (where your codebase is).
+All file tools (list_directory, read_file_content, write_file_content, run_python_script) can manage files in both directories. You are allowed to create, read, and edit scripts (.py, .sh, .txt, etc.) in both locations.
+Critical: You are forbidden from modifying or deleting your own core system configuration/code files (server.py, setup.py, launch.sh, install.sh, config.json) to prevent messing with your own running codebase.
 
 AI PERSISTENT MEMORY (Stored locally and privately on user's device):
 You are a privacy-focused, self-evolving AI. You must actively maintain a deep understanding of the user.
@@ -158,11 +159,11 @@ Available Tools:
 2. local_port_scan(target_ip, ports_list=[...])
    Scans a target IP address for open ports. Use lists like [22, 80, 443]. Keep target list short.
 3. list_directory(path=".")
-   Lists files and directories. Defaults to your workspace directory ({WORKSPACE_DIR}).
+   Lists files and directories. Defaults to your workspace directory ({WORKSPACE_DIR}). Can list files in the project root folder too.
 4. read_file_content(file_path, offset=0, limit=15000)
-   Reads the content of a text file inside your workspace directory. Supports paging via 'offset' and 'limit' parameters for large files.
+   Reads the content of a text file inside your workspace directory or project root directory. Supports paging via 'offset' and 'limit' parameters for large files.
 5. write_file_content(file_path, content)
-   Creates or overwrites a file inside your workspace directory. Useful for saving Python scripts or files (like 'memory.json' and 'instructions.txt').
+   Creates or overwrites a file inside your workspace directory or project root directory (excluding core system configuration/code files).
 6. run_python_script(script_name, args=[...])
    Runs a Python script written by you inside your workspace directory and returns its output. Use this to run custom scripts, write new tools, or build calculations.
 7. execute_termux_command(command)
@@ -505,21 +506,33 @@ def local_network_scan():
 
 
 def list_directory(path="."):
+    real_project = os.path.realpath(os.path.abspath(os.path.dirname(__file__)))
+    real_workspace = os.path.realpath(WORKSPACE_DIR)
+    
     if path == "." or not path:
         target_path = WORKSPACE_DIR
     else:
         if not os.path.isabs(os.path.expanduser(path)):
             target_path = os.path.abspath(os.path.join(WORKSPACE_DIR, path))
+            if not os.path.realpath(target_path).startswith(real_workspace):
+                target_path = os.path.abspath(os.path.join(real_project, path))
         else:
             target_path = os.path.abspath(os.path.expanduser(path))
             
-    if not os.path.exists(target_path):
+    real_target = os.path.realpath(target_path)
+    is_inside_workspace = real_target.startswith(real_workspace)
+    is_inside_project = real_target.startswith(real_project)
+    
+    if not (is_inside_workspace or is_inside_project):
+        return f"Error: Access denied. You are only allowed to list directories inside your workspace ({WORKSPACE_DIR}) or project directory ({real_project})."
+        
+    if not os.path.exists(real_target):
         return f"Error: Path '{path}' does not exist."
     try:
-        items = os.listdir(target_path)
+        items = os.listdir(real_target)
         results = []
         for item in items:
-            item_path = os.path.join(target_path, item)
+            item_path = os.path.join(real_target, item)
             is_dir = os.path.isdir(item_path)
             size = os.path.getsize(item_path) if not is_dir else 0
             results.append({
@@ -532,22 +545,37 @@ def list_directory(path="."):
         return f"Error listing directory: {str(e)}"
 
 def read_file_content(file_path, offset=0, limit=15000):
+    real_project = os.path.realpath(os.path.abspath(os.path.dirname(__file__)))
+    real_workspace = os.path.realpath(WORKSPACE_DIR)
+    
     if not os.path.isabs(os.path.expanduser(file_path)):
         target_path = os.path.abspath(os.path.join(WORKSPACE_DIR, file_path))
+        if not os.path.realpath(target_path).startswith(real_workspace):
+            target_path = os.path.abspath(os.path.join(real_project, file_path))
     else:
         target_path = os.path.abspath(os.path.expanduser(file_path))
         
-    if not os.path.exists(target_path):
+    real_target = os.path.realpath(target_path)
+    is_inside_workspace = real_target.startswith(real_workspace)
+    is_inside_project = real_target.startswith(real_project)
+    
+    if not (is_inside_workspace or is_inside_project):
+        return f"Error: Read access denied. You are only allowed to read files inside your workspace ({WORKSPACE_DIR}) or project directory ({real_project})."
+        
+    if os.path.basename(real_target) == "config.json":
+        return f"Error: Read access denied to critical configuration file config.json."
+        
+    if not os.path.exists(real_target):
         return f"Error: File '{file_path}' does not exist."
-    if os.path.isdir(target_path):
+    if os.path.isdir(real_target):
         return f"Error: '{file_path}' is a directory. Use list_directory to see its contents."
         
     try:
-        file_size = os.path.getsize(target_path)
+        file_size = os.path.getsize(real_target)
         offset = max(0, int(offset))
         limit = max(1, min(int(limit), 20000))
         
-        with open(target_path, "r", encoding="utf-8", errors="ignore") as f:
+        with open(real_target, "r", encoding="utf-8", errors="ignore") as f:
             f.seek(offset)
             content = f.read(limit)
             
@@ -602,17 +630,22 @@ def search_file_content(query, pattern="*"):
         return f"Error searching file content: {str(e)}"
 
 def write_file_content(file_path, content):
+    real_project = os.path.realpath(os.path.abspath(os.path.dirname(__file__)))
+    real_workspace = os.path.realpath(WORKSPACE_DIR)
+    
     if not os.path.isabs(os.path.expanduser(file_path)):
         target_path = os.path.abspath(os.path.join(WORKSPACE_DIR, file_path))
+        if not os.path.realpath(target_path).startswith(real_workspace):
+            target_path = os.path.abspath(os.path.join(real_project, file_path))
     else:
         target_path = os.path.abspath(os.path.expanduser(file_path))
         
-    # Security Sandbox Check: Prevent path traversal or writing outside the workspace directory
     real_target = os.path.realpath(target_path)
-    real_workspace = os.path.realpath(WORKSPACE_DIR)
+    is_inside_workspace = real_target.startswith(real_workspace)
+    is_inside_project = real_target.startswith(real_project)
     
-    if not real_target.startswith(real_workspace):
-        return f"Error: Write access denied. You are only allowed to write files inside your workspace: {WORKSPACE_DIR}"
+    if not (is_inside_workspace or is_inside_project):
+        return f"Error: Write access denied. You are only allowed to write files inside your workspace ({WORKSPACE_DIR}) or project directory ({real_project})."
         
     # Prevent touching main codebase files specifically by name (extra safety check)
     forbidden_files = ["server.py", "setup.py", "launch.sh", "install.sh", "config.json"]
@@ -623,7 +656,7 @@ def write_file_content(file_path, content):
         os.makedirs(os.path.dirname(real_target), exist_ok=True)
         with open(real_target, "w", encoding="utf-8") as f:
             f.write(content)
-        return f"Success: File '{file_path}' written successfully inside workspace."
+        return f"Success: File '{file_path}' written successfully."
     except Exception as e:
         return f"Error writing file: {str(e)}"
 
