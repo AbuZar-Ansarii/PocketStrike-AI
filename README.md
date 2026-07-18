@@ -1,4 +1,5 @@
-<img width="2658" height="984" alt="PocketStrike" src="https://github.com/user-attachments/assets/8ed89a99-619e-4165-b45d-ad7151c7c0d2" />
+<img width="2009" height="461" alt="PocketStrike" src="https://github.com/user-attachments/assets/e4121dc8-b1d6-4bbd-b678-6d4853d8a33b" />
+
 
 
 <p align="center">
