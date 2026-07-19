@@ -77,7 +77,7 @@ git clone https://github.com/AbuZar-Ansarii/PocketStrike-AI.git && cd PocketStri
 > **Getting "CANNOT LINK EXECUTABLE" Error?**
 > This is a common Termux issue caused by a corrupted/outdated Termux environment (e.g. if installed from Google Play instead of F-Droid). Fix your Termux package manager by running:
 > ```bash
-> pkg update -y && pkg upgrade -y
+> apt update && apt full-upgrade
 > ```
 > If Termux is completely locked, uninstall your current version and download the official updated build from **F-Droid** or **GitHub Releases**.
 
