@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Termux%20%7C%20Android-green?style=for-the-badge&logo=android" alt="Platform" />
   <img src="https://img.shields.io/badge/Language-Python%20%7C%20JS-blue?style=for-the-badge&logo=python" alt="Languages" />
-  <img src="https://img.shields.io/badge/Tools-53%20Built--in%20+%20MCP-purple?style=for-the-badge" alt="Tools" />
+  <img src="https://img.shields.io/badge/Tools-56%20Built--in%20+%20MCP-purple?style=for-the-badge" alt="Tools" />
   <img src="https://img.shields.io/badge/License-MIT-orange?style=for-the-badge" alt="License" />
 </p>
 
@@ -155,7 +155,7 @@ PocketStrike AI is built with privacy-first principles. **Zero conversation data
 
 ## 🔧 ReAct Function Calling Tools
 
-PocketStrike AI has access to **53 built-in local tools** to audit, crawl, and control systems:
+PocketStrike AI has access to **56 built-in local tools** to audit, crawl, and control systems:
 
 > [!IMPORTANT]
 > Tools marked with **`[Requires Termux:API]`** require the **Termux:API** Android application (available on F-Droid) to be installed on your device, along with the CLI package (`pkg install termux-api`) configured inside Termux.
@@ -215,3 +215,6 @@ PocketStrike AI has access to **53 built-in local tools** to audit, crawl, and c
 | 51 | `delete_file(file_path)` | Deletes a file or recursively deletes a directory inside your workspace directory. |
 | 52 | `download_file(url, file_name)` | Downloads a file (binary or text, like images, scripts, security payloads) from a web URL and saves it directly in your workspace directory. |
 | 53 | `read_contacts_list(search_query)`| Searches your phone's address book for contacts matching a name/number. [Requires Termux:API] |
+| 54 | `record_screen_video(duration_sec)`| Records a video clip of the phone's screen for a specified duration (ADB/Shizuku). |
+| 55 | `movement_intrusion_alarm(duration_sec)`| Monitors hardware accelerometer sensors to detect movement. [Requires Termux:API] |
+| 56 | `detect_faces_in_photo(photo_path)`| Performs face detection on a photo and draws green bounding boxes. |

@@ -259,7 +259,13 @@ Available Tools:
 52. download_file(url, file_name)
     Downloads a file (binary or text, like images, scripts, security payloads) from a web URL and saves it directly in your workspace directory.
 53. read_contacts_list(search_query="")
-    Searches the Android device's local address book for contacts matching the search query (name or number). If search_query is omitted, returns all contacts. (runs via local Termux-API).{mcp_tools_block}
+    Searches the Android device's local address book for contacts matching the search query (name or number). If search_query is omitted, returns all contacts. (runs via local Termux-API).
+54. record_screen_video(duration_sec=5)
+    Records a video clip of the phone's screen for a specified duration (maximum 30 seconds). Saves the video to the workspace as 'captured_screen_record.mp4'. (runs via local ADB or Shizuku shell).
+55. movement_intrusion_alarm(duration_sec=10)
+    Monitors phone movement using hardware accelerometer sensors. If moved, vibrates and triggers an intrusion alert notification. (runs via local Termux-API).
+56. detect_faces_in_photo(photo_path)
+    Performs face detection on the specified photo using OpenCV and Haar Cascade. Binds green boxes around detected faces and saves the output as 'annotated_<filename>'. (runs via local Python processor).{mcp_tools_block}
 
 Instructions:
 - When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
@@ -1132,6 +1138,184 @@ def read_contacts_list(search_query=None):
         return "Error: termux-contact-list is not available on this device. Ensure Termux:API is installed and configured."
     except Exception as e:
         return f"Error reading contacts: {str(e)}"
+
+def record_screen_video(duration_sec=5):
+    target_name = "captured_screen_record.mp4"
+    target_path = os.path.join(WORKSPACE_DIR, target_name)
+    
+    if os.path.exists(target_path):
+        try: os.remove(target_path)
+        except Exception: pass
+        
+    duration = min(max(int(duration_sec), 2), 30)
+    
+    import shutil
+    use_shizuku = shutil.which("rish") is not None or os.path.exists("/sdcard/Shizuku/rish") or os.path.exists(os.path.expanduser("~/storage/shared/Shizuku/rish"))
+    
+    if use_shizuku:
+        run_adb_command("devices")
+        rish_path = shutil.which("rish") or "/data/data/com.termux/files/usr/bin/rish"
+        env = os.environ.copy()
+        env["RISH_APPLICATION_ID"] = get_termux_package_id()
+        env.pop("LD_LIBRARY_PATH", None)
+        env.pop("LD_PRELOAD", None)
+        shell_exe = "/system/bin/sh" if os.path.exists("/system/bin/sh") else "sh"
+        
+        try:
+            subprocess.run([shell_exe, rish_path, "-c", "rm /sdcard/temp_record.mp4"], env=env, capture_output=True, timeout=5)
+            cmd = f"screenrecord --time-limit {duration} /sdcard/temp_record.mp4"
+            res = subprocess.run([shell_exe, rish_path, "-c", cmd], env=env, capture_output=True, timeout=duration + 10)
+            
+            sdcard_path = "/sdcard/temp_record.mp4"
+            if not os.path.exists(sdcard_path):
+                sdcard_path = "/storage/emulated/0/temp_record.mp4"
+                
+            if os.path.exists(sdcard_path) and os.path.getsize(sdcard_path) > 0:
+                shutil.copy(sdcard_path, target_path)
+                try: os.remove(sdcard_path)
+                except Exception: pass
+                return f"Success: Screen recorded for {duration} seconds. Saved to workspace as '{target_name}'. Path: {target_path}."
+        except Exception:
+            pass
+            
+    # Fallback to standard ADB
+    ok, out = run_adb_command("devices")
+    if not ok or len([line for line in out.strip().split("\n") if "device" in line and not "devices" in line]) == 0:
+        return "Error: Neither Shizuku nor ADB is connected. Screen recording requires Shizuku or wireless ADB authorized on this device."
+        
+    run_adb_command("shell rm /sdcard/temp_record.mp4")
+    ok, out = run_adb_command(f"shell screenrecord --time-limit {duration} /sdcard/temp_record.mp4")
+    if not ok:
+        return f"Error executing screenrecord command: {out}"
+        
+    ok, out = run_adb_command(f"pull /sdcard/temp_record.mp4 {target_path}")
+    run_adb_command("shell rm /sdcard/temp_record.mp4")
+    
+    if ok and os.path.exists(target_path) and os.path.getsize(target_path) > 0:
+        return f"Success: Screen recorded for {duration} seconds. Saved to workspace as '{target_name}'. Path: {target_path}."
+    return f"Error transferring video record to workspace: {out}"
+
+def movement_intrusion_alarm(duration_sec=10):
+    import subprocess
+    import json
+    import time
+    import math
+    
+    duration = min(max(int(duration_sec), 5), 60)
+    
+    try:
+        proc = subprocess.Popen(
+            ["termux-sensor", "-s", "accelerometer", "-delay", "200"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1
+        )
+    except FileNotFoundError:
+        return "Error: termux-sensor utility is not installed. Make sure Termux:API is installed and configured."
+        
+    start_time = time.time()
+    baseline = None
+    triggered = False
+    max_deviation = 0.0
+    
+    try:
+        import select
+        
+        while time.time() - start_time < duration:
+            r, _, _ = select.select([proc.stdout], [], [], 0.5)
+            if r:
+                line = proc.stdout.readline()
+                if not line:
+                    break
+                line = line.strip()
+                if "values" in line:
+                    try:
+                        idx = line.find("[")
+                        if idx != -1:
+                            end_idx = line.find("]", idx)
+                            if end_idx != -1:
+                                vals_str = line[idx+1:end_idx]
+                                vals = [float(v.strip()) for v in vals_str.split(",")]
+                                if len(vals) >= 3:
+                                    x, y, z = vals[0], vals[1], vals[2]
+                                    magnitude = math.sqrt(x*x + y*y + z*z)
+                                    
+                                    if baseline is None:
+                                        baseline = magnitude
+                                    else:
+                                        deviation = abs(magnitude - baseline)
+                                        if deviation > max_deviation:
+                                            max_deviation = deviation
+                                        if deviation > 1.8:
+                                            triggered = True
+                    except Exception:
+                        pass
+                          
+        proc.terminate()
+        subprocess.run(["termux-sensor", "-n"], capture_output=True, timeout=2)
+        
+        if triggered:
+            vibrate_device(800)
+            send_android_notification("🚨 Intrusion Alarm", f"Movement detected! Max deviation: {max_deviation:.2f} m/s²")
+            return f"ALARM TRIGGERED: Movement detected during monitoring window! Max acceleration deviation: {max_deviation:.2f} m/s² (Threshold: 1.8 m/s²). Intruder alert notification dispatched."
+        else:
+            return f"Secure: No movement detected during the {duration} seconds monitoring window. Max deviation: {max_deviation:.2f} m/s² (stationary)."
+            
+    except Exception as e:
+        try: proc.terminate()
+        except Exception: pass
+        subprocess.run(["termux-sensor", "-n"], capture_output=True, timeout=2)
+        return f"Error running intrusion alarm: {str(e)}"
+
+def detect_faces_in_photo(photo_path):
+    import os
+    real_path = os.path.abspath(os.path.expanduser(photo_path))
+    if not os.path.exists(real_path):
+        real_path = os.path.join(WORKSPACE_DIR, photo_path)
+        if not os.path.exists(real_path):
+            return f"Error: Photo file '{photo_path}' not found."
+            
+    try:
+        import cv2
+    except ImportError:
+        return "Error: OpenCV is not installed on this Termux environment. To enable local face detection, install it by running:\npkg install opencv\nor\npip install opencv-python"
+        
+    try:
+        image = cv2.imread(real_path)
+        if image is None:
+            return f"Error: Failed to read image file at '{real_path}'."
+            
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        cascade_path = os.path.join(cv2.data.haarcascades, 'haarcascade_frontalface_default.xml')
+        
+        if not os.path.exists(cascade_path):
+            import urllib.request
+            url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
+            os.makedirs(os.path.dirname(cascade_path), exist_ok=True)
+            urllib.request.urlretrieve(url, cascade_path)
+            
+        face_cascade = cv2.CascadeClassifier(cascade_path)
+        faces = face_cascade.detectMultiScale(
+            gray,
+            scaleFactor=1.1,
+            minNeighbors=5,
+            minSize=(30, 30)
+        )
+        
+        num_faces = len(faces)
+        if num_faces > 0:
+            for (x, y, w, h) in faces:
+                cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 2)
+            annotated_name = "annotated_" + os.path.basename(real_path)
+            annotated_path = os.path.join(os.path.dirname(real_path), annotated_name)
+            cv2.imwrite(annotated_path, image)
+            
+            return f"FACE DETECTED: Found {num_faces} human face(s) in the photo. Annotated image saved to workspace as '{annotated_name}'."
+        else:
+            return "No faces detected in the photo."
+    except Exception as e:
+        return f"Error performing face detection: {str(e)}"
 
 def set_brightness(level):
     try:
@@ -2645,6 +2829,17 @@ def execute_local_tool(name, args_str):
         elif name == "read_contacts_list":
             search_query = kwargs.get("search_query", "")
             return read_contacts_list(search_query)
+        elif name == "record_screen_video":
+            duration_sec = kwargs.get("duration_sec", 5)
+            return record_screen_video(duration_sec)
+        elif name == "movement_intrusion_alarm":
+            duration_sec = kwargs.get("duration_sec", 10)
+            return movement_intrusion_alarm(duration_sec)
+        elif name == "detect_faces_in_photo":
+            photo_path = kwargs.get("photo_path")
+            if not photo_path:
+                return "Error: Missing required argument 'photo_path'."
+            return detect_faces_in_photo(photo_path)
         elif name == "set_brightness":
             level = kwargs.get("level")
             if level is None:
