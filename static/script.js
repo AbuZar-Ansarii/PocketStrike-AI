@@ -2,6 +2,7 @@
 let conversations = [];
 let activeConversationId = null;
 let isGenerating = false;
+let activeAbortController = null;
 
 // DOM Elements
 const sidebar = document.getElementById('sidebar');
@@ -66,7 +67,10 @@ function initEventListeners() {
     clearBtn.addEventListener('click', clearAllConversations);
 
     // Textarea Auto-grow and Enter-to-Submit
-    chatInput.addEventListener('input', autoGrowInput);
+    chatInput.addEventListener('input', () => {
+        autoGrowInput();
+        toggleSendButton();
+    });
     chatInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             const isMobile = window.innerWidth <= 768;
@@ -311,8 +315,12 @@ function fillPrompt(promptText) {
 
 // Handle sending message
 async function handleSend() {
+    if (isGenerating) {
+        handleStop();
+        return;
+    }
     const text = chatInput.value.trim();
-    if (!text || isGenerating) return;
+    if (!text) return;
 
     // Clear input box
     chatInput.value = '';
@@ -343,10 +351,12 @@ async function handleSend() {
     renderTypingIndicator();
 
     try {
+        activeAbortController = new AbortController();
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messages: activeChat.messages })
+            body: JSON.stringify({ messages: activeChat.messages }),
+            signal: activeAbortController.signal
         });
 
         removeTypingIndicator();
@@ -402,19 +412,53 @@ async function handleSend() {
         }
     } catch (e) {
         removeTypingIndicator();
-        activeChat.messages.push({ role: 'assistant', content: `⚠️ Network error: Could not reach Flask server. Check if Termux server is running. (${e.message})` });
+        if (e.name !== 'AbortError') {
+            activeChat.messages.push({ role: 'assistant', content: `⚠️ Network error: Could not reach Flask server. Check if Termux server is running. (${e.message})` });
+        }
+    } finally {
+        activeAbortController = null;
+        isGenerating = false;
+        toggleSendButton();
+        saveConversations();
+        renderAll();
+        scrollToBottom();
     }
-
-    isGenerating = false;
-    toggleSendButton();
-    saveConversations();
-    renderAll();
-    scrollToBottom();
 }
 
-// Toggle Send button disabled state
+// Stop active AI generation
+function handleStop() {
+    if (activeAbortController) {
+        activeAbortController.abort();
+        activeAbortController = null;
+    }
+    isGenerating = false;
+    toggleSendButton();
+    removeTypingIndicator();
+}
+
+// Toggle Send button state (shows Stop button when generating)
 function toggleSendButton() {
-    sendBtn.disabled = isGenerating;
+    if (isGenerating) {
+        sendBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+            </svg>
+        `;
+        sendBtn.title = "Stop generating";
+        sendBtn.classList.add('generating');
+        sendBtn.disabled = false;
+    } else {
+        sendBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+        `;
+        sendBtn.title = "Send message";
+        sendBtn.classList.remove('generating');
+        const text = chatInput.value.trim();
+        sendBtn.disabled = !text;
+    }
 }
 
 // Render typing indicator block

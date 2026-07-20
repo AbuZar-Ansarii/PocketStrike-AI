@@ -911,6 +911,20 @@ body.light-mode .message-bubble pre {
     cursor: not-allowed;
 }
 
+.send-btn.generating {
+    background: #ff4757;
+    box-shadow: 0 2px 10px rgba(255, 71, 87, 0.3);
+}
+
+.send-btn.generating svg {
+    transform: none;
+}
+
+.send-btn.generating:hover {
+    background: #ff6b81;
+    box-shadow: 0 2px 12px rgba(255, 71, 87, 0.5);
+}
+
 .footer-note {
     font-size: 0.7rem;
     color: var(--text-muted);
