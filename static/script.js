@@ -918,13 +918,6 @@ setInterval(pollHistoryChanges, 8000);
 function openMcpModal() {
     mcpName.value = "";
     mcpUrl.value = "";
-    mcpCommand.value = "";
-    if (mcpHeaders) mcpHeaders.value = "";
-    if (mcpTransport) {
-        mcpTransport.value = "sse";
-        mcpUrlGroup.style.display = "flex";
-        mcpCommandGroup.style.display = "none";
-    }
     mcpModal.classList.add('show');
 }
 
@@ -983,35 +976,14 @@ function renderMcpList(servers) {
 // Add new MCP connection
 async function handleAddMcp() {
     const name = mcpName.value.trim();
-    const transport = mcpTransport ? mcpTransport.value : 'sse';
+    const url = mcpUrl.value.trim();
     
-    let payload = { name, transport };
-    
-    if (transport === 'sse') {
-        const url = mcpUrl.value.trim();
-        if (!name || !url) {
-            alert("Please enter both a name and server URL.");
-            return;
-        }
-        payload.url = url;
-        
-        const headersStr = mcpHeaders ? mcpHeaders.value.trim() : "";
-        if (headersStr) {
-            try {
-                payload.headers = JSON.parse(headersStr);
-            } catch (err) {
-                alert('Invalid headers JSON format. Please use correct JSON formatting. Example: {"Authorization": "Bearer token_here"}');
-                return;
-            }
-        }
-    } else {
-        const command = mcpCommand.value.trim();
-        if (!name || !command) {
-            alert("Please enter both a name and command.");
-            return;
-        }
-        payload.command = command;
+    if (!name || !url) {
+        alert("Please enter both a name and server URL.");
+        return;
     }
+    
+    let payload = { name, transport: 'sse', url };
     
     mcpSubmitBtn.disabled = true;
     mcpSubmitBtn.innerText = "Connecting...";
