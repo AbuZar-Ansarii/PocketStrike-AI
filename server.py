@@ -3418,6 +3418,144 @@ def init_stdio_mcp_connections():
                 else:
                     print(f"❌ Failed to start stdio MCP server '{name}'")
 
+def parse_sse_response(text):
+    import json
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("data:"):
+            data_str = line.replace("data:", "").strip()
+            try:
+                return json.loads(data_str)
+            except Exception:
+                pass
+    return None
+
+def query_streamable_http_tools(url, headers=None):
+    import requests
+    import json
+    
+    post_headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream"
+    }
+    if headers:
+        post_headers.update(headers)
+        
+    try:
+        # 1. Initialize
+        init_payload = {
+            "jsonrpc": "2.0",
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "pocketstrike-client", "version": "1.0.0"}
+            },
+            "id": 100
+        }
+        res1 = requests.post(url, json=init_payload, headers=post_headers, timeout=8)
+        if res1.status_code != 200:
+            return None, f"Streamable HTTP initialize failed (HTTP {res1.status_code})"
+            
+        init_resp = parse_sse_response(res1.text)
+        if not init_resp:
+            return None, f"Failed to parse SSE initialize response: {res1.text}"
+            
+        # 2. Notification/initialized
+        initialized_payload = {
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+        }
+        requests.post(url, json=initialized_payload, headers=post_headers, timeout=8)
+        
+        # 3. Tools/list
+        tools_payload = {
+            "jsonrpc": "2.0",
+            "method": "tools/list",
+            "params": {},
+            "id": 101
+        }
+        res2 = requests.post(url, json=tools_payload, headers=post_headers, timeout=8)
+        if res2.status_code != 200:
+            return None, f"Streamable HTTP tools/list failed (HTTP {res2.status_code})"
+            
+        tools_resp = parse_sse_response(res2.text)
+        if not tools_resp:
+            return None, f"Failed to parse SSE tools/list response: {res2.text}"
+            
+        if "result" in tools_resp and "tools" in tools_resp["result"]:
+            return tools_resp["result"]["tools"], url + "#streamable"
+            
+        return None, f"Unexpected tools/list response format: {tools_resp}"
+    except Exception as e:
+        return None, f"Streamable HTTP handshake failed: {str(e)}"
+
+def call_streamable_http_tool(url, tool_name, arguments, headers=None):
+    import requests
+    import json
+    
+    post_headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream"
+    }
+    if headers:
+        post_headers.update(headers)
+        
+    try:
+        # 1. Initialize
+        init_payload = {
+            "jsonrpc": "2.0",
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "pocketstrike-client", "version": "1.0.0"}
+            },
+            "id": 100
+        }
+        res1 = requests.post(url, json=init_payload, headers=post_headers, timeout=8)
+        if res1.status_code != 200:
+            return f"Error: Streamable HTTP initialize failed (HTTP {res1.status_code})"
+            
+        # 2. Notification/initialized
+        initialized_payload = {
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+        }
+        requests.post(url, json=initialized_payload, headers=post_headers, timeout=8)
+        
+        # 3. Call tool
+        call_payload = {
+            "jsonrpc": "2.0",
+            "method": "tools/call",
+            "params": {
+                "name": tool_name,
+                "arguments": arguments
+            },
+            "id": 102
+        }
+        res2 = requests.post(url, json=call_payload, headers=post_headers, timeout=20)
+        if res2.status_code != 200:
+            return f"Error: Streamable HTTP tools/call failed (HTTP {res2.status_code})"
+            
+        call_resp = parse_sse_response(res2.text)
+        if not call_resp:
+            return f"Error: Failed to parse SSE tool response: {res2.text}"
+            
+        if "result" in call_resp and "content" in call_resp["result"]:
+            contents = call_resp["result"]["content"]
+            text_outputs = []
+            for c in contents:
+                if c.get("type") == "text":
+                    text_outputs.append(c.get("text", ""))
+            return "\n".join(text_outputs)
+        elif "error" in call_resp:
+            return f"Error from remote MCP server: {call_resp['error'].get('message')}"
+            
+        return f"Error: Unexpected response format: {call_resp}"
+    except Exception as e:
+        return f"Error executing remote Streamable HTTP tool: {str(e)}"
+
 def query_remote_mcp_tools(url, headers=None):
     import requests
     import urllib.parse
@@ -3430,8 +3568,13 @@ def query_remote_mcp_tools(url, headers=None):
             req_headers.update(headers)
         # 1. Establish GET stream
         res = requests.get(url, headers=req_headers, stream=True, timeout=8)
+        if res.status_code in (405, 406):
+            res.close()
+            return query_streamable_http_tools(url, headers)
+            
         if res.status_code != 200:
-            return None, f"SSE endpoint rejected connection (HTTP {res.status_code})"
+            res.close()
+            return query_streamable_http_tools(url, headers)
             
         post_path = None
         lines_iterator = res.iter_lines()
@@ -3548,9 +3691,16 @@ def query_remote_mcp_tools(url, headers=None):
         return None, "Handshake timed out waiting for 'tools/list' response."
         
     except Exception as e:
-        return None, f"Connection failed: {str(e)}"
+        try:
+            return query_streamable_http_tools(url, headers)
+        except Exception:
+            return None, f"Connection failed: {str(e)}"
 
 def call_remote_mcp_tool(base_url, tool_name, arguments, headers=None):
+    if base_url.endswith("#streamable") or "#streamable" in base_url:
+        clean_url = base_url.split("#")[0]
+        return call_streamable_http_tool(clean_url, tool_name, arguments, headers)
+        
     import requests
     import urllib.parse
     import threading
@@ -3562,8 +3712,13 @@ def call_remote_mcp_tool(base_url, tool_name, arguments, headers=None):
             req_headers.update(headers)
         # 1. Establish GET stream
         res = requests.get(base_url, headers=req_headers, stream=True, timeout=8)
+        if res.status_code in (405, 406):
+            res.close()
+            return call_streamable_http_tool(base_url, tool_name, arguments, headers)
+            
         if res.status_code != 200:
-            return f"Error: Failed to connect to remote SSE stream (HTTP {res.status_code})"
+            res.close()
+            return call_streamable_http_tool(base_url, tool_name, arguments, headers)
             
         post_path = None
         lines_iterator = res.iter_lines()
@@ -3687,7 +3842,10 @@ def call_remote_mcp_tool(base_url, tool_name, arguments, headers=None):
             return f"Error: Unexpected response format: {resp_data}"
         return "Error: Tool execution timed out waiting for server response."
     except Exception as e:
-        return f"Error executing remote MCP tool: {str(e)}"
+        try:
+            return call_streamable_http_tool(base_url, tool_name, arguments, headers)
+        except Exception:
+            return f"Error executing remote MCP tool: {str(e)}"
 
 # Telegram Bot Polling Thread
 def telegram_bot_loop(token):
@@ -3807,10 +3965,11 @@ def send_telegram_photo(token, chat_id, photo_path, caption=None):
 def check_mcp_status(url, headers=None):
     import requests
     try:
+        clean_url = url.split("#")[0]
         req_headers = {}
         if headers:
             req_headers.update(headers)
-        res = requests.get(url, headers=req_headers, timeout=1.2)
+        res = requests.get(clean_url, headers=req_headers, timeout=1.2)
         # If it returns any HTTP code (even error codes like 405/404), the server port is active and online
         return "connected"
     except Exception:
