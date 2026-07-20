@@ -2736,16 +2736,59 @@ def execute_local_tool(name, args_str):
                 return "Error: Missing required argument 'query'."
             return search_file_content(query, pattern)
         else:
-            # Check if it's a remote MCP tool
+            # Check if it's an MCP tool
             mcp_conns = load_mcp_connections()
-            mcp_tools_map = {}
+            mcp_tool_routing = {}
             for conn in mcp_conns:
-                base_url = conn.get("url")
                 for t in conn.get("tools", []):
-                    mcp_tools_map[t.get("name")] = base_url
+                    mcp_tool_routing[t.get("name")] = conn
                     
-            if name in mcp_tools_map:
-                return call_remote_mcp_tool(mcp_tools_map[name], name, kwargs)
+            if name in mcp_tool_routing:
+                conn = mcp_tool_routing[name]
+                transport = conn.get("transport", "sse")
+                if transport == "stdio":
+                    conn_name = conn.get("name")
+                    stdio_conn = active_stdio_connections.get(conn_name)
+                    if not stdio_conn:
+                        # Try to restart it
+                        print(f"🔌 Lazy-starting stdio MCP server: {conn_name}")
+                        stdio_conn = StdioMcpConnection(conn_name, conn.get("command"))
+                        if stdio_conn.start():
+                            # Perform handshake
+                            init_res = stdio_conn.send_request("initialize", {
+                                "protocolVersion": "2024-11-05",
+                                "capabilities": {},
+                                "clientInfo": {"name": "pocketstrike-client", "version": "1.0.0"}
+                            })
+                            if "error" not in init_res:
+                                stdio_conn.send_notification("notifications/initialized")
+                                active_stdio_connections[conn_name] = stdio_conn
+                            else:
+                                stdio_conn.stop()
+                                stdio_conn = None
+                        else:
+                            stdio_conn = None
+                            
+                    if not stdio_conn:
+                        return f"Error: Stdio MCP server '{conn_name}' is not running and failed to start."
+                        
+                    res = stdio_conn.send_request("tools/call", {
+                        "name": name,
+                        "arguments": kwargs
+                    })
+                    
+                    if "error" in res:
+                        return f"Error from stdio MCP server: {res['error'].get('message')}"
+                    elif "result" in res and "content" in res["result"]:
+                        contents = res["result"]["content"]
+                        text_outputs = []
+                        for c in contents:
+                            if c.get("type") == "text":
+                                text_outputs.append(c.get("text", ""))
+                        return "\n".join(text_outputs)
+                    return f"Error: Unexpected response format from stdio MCP: {res}"
+                else:
+                    return call_remote_mcp_tool(conn.get("url"), name, kwargs)
             else:
                 return f"Error: Tool '{name}' is not recognized."
     except Exception as e:
@@ -3190,6 +3233,209 @@ def save_mcp_connections(conns):
     except Exception as e:
         print(f"Error saving MCP connections: {e}")
 
+def resolve_post_url(base_url, post_path):
+    import urllib.parse
+    if post_path.startswith("http://") or post_path.startswith("https://"):
+        return post_path
+    parsed_base = urllib.parse.urlparse(base_url)
+    base_path = parsed_base.path
+    if not base_path or base_path == "/":
+        return urllib.parse.urljoin(base_url, post_path)
+    clean_post_path = post_path.lstrip("/")
+    if not base_path.endswith("/"):
+        base_path_with_slash = base_path + "/"
+    else:
+        base_path_with_slash = base_path
+    reconstructed_base = urllib.parse.urlunparse((
+        parsed_base.scheme,
+        parsed_base.netloc,
+        base_path_with_slash,
+        parsed_base.params,
+        parsed_base.query,
+        parsed_base.fragment
+    ))
+    normalized_base_path = base_path.strip("/")
+    normalized_post_path = clean_post_path.split("?")[0].split("/")[0]
+    if normalized_base_path and normalized_base_path == normalized_post_path:
+        return urllib.parse.urljoin(base_url, post_path)
+    return urllib.parse.urljoin(reconstructed_base, clean_post_path)
+
+class StdioMcpConnection:
+    def __init__(self, name, command):
+        self.name = name
+        self.command = command
+        self.proc = None
+        self.reader_thread = None
+        self.stderr_thread = None
+        self.response_queues = {}
+        self.is_running = False
+        self.lock = threading.Lock()
+        self.next_id = 1
+        
+    def start(self):
+        import subprocess
+        import shlex
+        import os
+        import threading
+        try:
+            use_shell = os.name == 'nt'
+            if use_shell:
+                cmd_args = self.command
+            else:
+                cmd_args = shlex.split(self.command)
+                
+            self.proc = subprocess.Popen(
+                cmd_args,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                shell=use_shell,
+                bufsize=1
+            )
+            self.is_running = True
+            
+            self.reader_thread = threading.Thread(target=self._read_loop, daemon=True)
+            self.reader_thread.start()
+            
+            self.stderr_thread = threading.Thread(target=self._stderr_loop, daemon=True)
+            self.stderr_thread.start()
+            
+            return True
+        except Exception as e:
+            print(f"Error starting stdio MCP server '{self.name}': {e}")
+            self.is_running = False
+            return False
+            
+    def _read_loop(self):
+        import json
+        try:
+            for line in iter(self.proc.stdout.readline, ''):
+                if not line:
+                    break
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    msg = json.loads(line)
+                    msg_id = msg.get("id")
+                    if msg_id is not None:
+                        with self.lock:
+                            q = self.response_queues.get(msg_id)
+                        if q:
+                            q.put(msg)
+                except Exception as e:
+                    print(f"[{self.name}] Error parsing stdio message: {e}. Raw line: {line}")
+        except Exception as e:
+            print(f"[{self.name}] Stdio read loop error: {e}")
+        finally:
+            self.is_running = False
+            
+    def _stderr_loop(self):
+        try:
+            for line in iter(self.proc.stderr.readline, ''):
+                if not line:
+                    break
+                print(f"[{self.name} STDERR] {line.strip()}")
+        except Exception:
+            pass
+            
+    def send_request(self, method, params=None, timeout=15):
+        import json
+        import queue
+        if not self.is_running or not self.proc:
+            if not self.start():
+                return {"error": {"message": "Stdio MCP process is not running"}}
+                
+        with self.lock:
+            req_id = self.next_id
+            self.next_id += 1
+            q = queue.Queue()
+            self.response_queues[req_id] = q
+            
+        req = {
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params or {},
+            "id": req_id
+        }
+        
+        try:
+            payload = json.dumps(req) + "\n"
+            self.proc.stdin.write(payload)
+            self.proc.stdin.flush()
+        except Exception as e:
+            self.is_running = False
+            return {"error": {"message": f"Failed to write to stdio: {e}"}}
+            
+        try:
+            resp = q.get(timeout=timeout)
+            return resp
+        except queue.Empty:
+            return {"error": {"message": f"Request timed out waiting for stdio response after {timeout}s"}}
+        finally:
+            with self.lock:
+                self.response_queues.pop(req_id, None)
+                
+    def send_notification(self, method, params=None):
+        import json
+        if not self.is_running or not self.proc:
+            self.start()
+        req = {
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params or {}
+        }
+        try:
+            payload = json.dumps(req) + "\n"
+            self.proc.stdin.write(payload)
+            self.proc.stdin.flush()
+            return True
+        except Exception:
+            self.is_running = False
+            return False
+            
+    def stop(self):
+        self.is_running = False
+        if self.proc:
+            try:
+                self.proc.terminate()
+                self.proc.wait(timeout=2)
+            except Exception:
+                try:
+                    self.proc.kill()
+                except Exception:
+                    pass
+            self.proc = None
+
+active_stdio_connections = {}
+
+def init_stdio_mcp_connections():
+    conns = load_mcp_connections()
+    for conn in conns:
+        if conn.get("transport") == "stdio":
+            name = conn.get("name")
+            cmd = conn.get("command")
+            if name and cmd:
+                print(f"🔌 Starting stdio MCP server: {name} ({cmd})")
+                stdio_conn = StdioMcpConnection(name, cmd)
+                if stdio_conn.start():
+                    # Perform handshake
+                    init_res = stdio_conn.send_request("initialize", {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "clientInfo": {"name": "pocketstrike-client", "version": "1.0.0"}
+                    })
+                    if "error" not in init_res:
+                        stdio_conn.send_notification("notifications/initialized")
+                        active_stdio_connections[name] = stdio_conn
+                        print(f"✅ Handshake successful with stdio MCP server '{name}'")
+                    else:
+                        print(f"❌ Handshake failed with stdio MCP server '{name}': {init_res.get('error')}")
+                        stdio_conn.stop()
+                else:
+                    print(f"❌ Failed to start stdio MCP server '{name}'")
+
 def query_remote_mcp_tools(url):
     import requests
     import urllib.parse
@@ -3216,7 +3462,7 @@ def query_remote_mcp_tools(url):
         if not post_path:
             post_url = urllib.parse.urljoin(url, "/message")
         else:
-            post_url = urllib.parse.urljoin(url, post_path)
+            post_url = resolve_post_url(url, post_path)
             
         # Shared state for thread communication
         shared_state = {
@@ -3341,7 +3587,7 @@ def call_remote_mcp_tool(base_url, tool_name, arguments):
         if not post_path:
             post_url = urllib.parse.urljoin(base_url, "/message")
         else:
-            post_url = urllib.parse.urljoin(base_url, post_path)
+            post_url = resolve_post_url(base_url, post_path)
             
         shared_state = {
             "initialize_response": None,
@@ -3580,7 +3826,14 @@ def list_mcp_servers():
     updated = False
     for conn in conns:
         old_status = conn.get("status")
-        new_status = check_mcp_status(conn.get("url"))
+        transport = conn.get("transport", "sse")
+        if transport == "stdio":
+            name = conn.get("name")
+            stdio_conn = active_stdio_connections.get(name)
+            new_status = "connected" if (stdio_conn and stdio_conn.is_running) else "offline"
+        else:
+            new_status = check_mcp_status(conn.get("url"))
+            
         if old_status != new_status:
             conn["status"] = new_status
             updated = True
@@ -3592,29 +3845,73 @@ def list_mcp_servers():
 def add_mcp_server():
     data = request.json or {}
     name = data.get("name", "").strip().lower()
-    url = data.get("url", "").strip()
+    transport = data.get("transport", "sse").strip().lower()
     
-    if not name or not url:
-        return jsonify({"error": "Missing required fields 'name' and/or 'url'."}), 400
+    if not name:
+        return jsonify({"error": "Missing required field 'name'."}), 400
         
     conns = load_mcp_connections()
     if any(c.get("name") == name for c in conns):
         return jsonify({"error": f"An MCP connection with name '{name}' already exists."}), 400
         
-    tools, post_url = query_remote_mcp_tools(url)
-    if not tools:
-        return jsonify({"error": f"Failed to connect to remote MCP server. Verify URL is correct and server is running."}), 400
+    if transport == "stdio":
+        command = data.get("command", "").strip()
+        if not command:
+            return jsonify({"error": "Missing required field 'command' for stdio transport."}), 400
+            
+        stdio_conn = StdioMcpConnection(name, command)
+        if not stdio_conn.start():
+            return jsonify({"error": "Failed to start stdio process. Check command spelling/availability."}), 400
+            
+        init_res = stdio_conn.send_request("initialize", {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "pocketstrike-client", "version": "1.0.0"}
+        })
+        if "error" in init_res:
+            stdio_conn.stop()
+            return jsonify({"error": f"Handshake failed: {init_res['error'].get('message')}"}), 400
+            
+        stdio_conn.send_notification("notifications/initialized")
         
-    new_conn = {
-        "name": name,
-        "url": url,
-        "post_url": post_url,
-        "status": "connected",
-        "tools": tools
-    }
-    conns.append(new_conn)
-    save_mcp_connections(conns)
-    return jsonify({"status": "success", "tools_count": len(tools)})
+        tools_res = stdio_conn.send_request("tools/list")
+        if "error" in tools_res or "result" not in tools_res or "tools" not in tools_res["result"]:
+            stdio_conn.stop()
+            return jsonify({"error": "Failed to retrieve tools from stdio MCP server."}), 400
+            
+        tools = tools_res["result"]["tools"]
+        
+        new_conn = {
+            "name": name,
+            "transport": "stdio",
+            "command": command,
+            "status": "connected",
+            "tools": tools
+        }
+        conns.append(new_conn)
+        save_mcp_connections(conns)
+        active_stdio_connections[name] = stdio_conn
+        return jsonify({"status": "success", "tools_count": len(tools)})
+    else:
+        url = data.get("url", "").strip()
+        if not url:
+            return jsonify({"error": "Missing required field 'url' for sse transport."}), 400
+            
+        tools, post_url = query_remote_mcp_tools(url)
+        if not tools:
+            return jsonify({"error": f"Failed to connect to remote MCP server. Verify URL is correct and server is running."}), 400
+            
+        new_conn = {
+            "name": name,
+            "transport": "sse",
+            "url": url,
+            "post_url": post_url,
+            "status": "connected",
+            "tools": tools
+        }
+        conns.append(new_conn)
+        save_mcp_connections(conns)
+        return jsonify({"status": "success", "tools_count": len(tools)})
 
 @app.route('/api/mcp/remove', methods=['POST'])
 def remove_mcp_server():
@@ -3628,6 +3925,11 @@ def remove_mcp_server():
     
     if len(filtered) == len(conns):
         return jsonify({"error": f"MCP connection '{name}' not found."}), 404
+        
+    stdio_conn = active_stdio_connections.pop(name, None)
+    if stdio_conn:
+        print(f"🔌 Stopping stdio MCP server: {name}")
+        stdio_conn.stop()
         
     save_mcp_connections(filtered)
     return jsonify({"status": "success"})
@@ -3730,6 +4032,12 @@ if __name__ == '__main__':
     if not load_config():
         print("⚠️ Warning: config.json not found! Please run the Setup Wizard first.")
         print("Starting anyway in fallback mode.")
+
+    # Initialize local stdio MCP connections
+    try:
+        init_stdio_mcp_connections()
+    except Exception as e:
+        print(f"Error initializing stdio MCP connections: {e}")
         
     # Start Scheduler Thread
     scheduler_thread = threading.Thread(target=scheduler_worker_loop, daemon=True)

@@ -1461,7 +1461,8 @@ body.light-mode .tool-result-header:hover {
     color: var(--text-secondary);
 }
 
-.form-group input {
+.form-group input,
+.form-group select {
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--border-color);
     padding: 0.65rem 0.85rem;
@@ -1472,8 +1473,14 @@ body.light-mode .tool-result-header:hover {
     transition: border-color 0.2s ease;
 }
 
-.form-group input:focus {
+.form-group input:focus,
+.form-group select:focus {
     border-color: var(--accent-primary);
+}
+
+.form-group select option {
+    background: var(--bg-sidebar);
+    color: var(--text-primary);
 }
 
 .modal-actions {

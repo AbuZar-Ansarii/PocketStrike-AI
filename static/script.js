@@ -30,6 +30,10 @@ const mcpSubmitBtn = document.getElementById('mcpSubmitBtn');
 const mcpName = document.getElementById('mcpName');
 const mcpUrl = document.getElementById('mcpUrl');
 const sidebarMcpList = document.getElementById('sidebarMcpList');
+const mcpTransport = document.getElementById('mcpTransport');
+const mcpUrlGroup = document.getElementById('mcpUrlGroup');
+const mcpCommandGroup = document.getElementById('mcpCommandGroup');
+const mcpCommand = document.getElementById('mcpCommand');
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
@@ -80,6 +84,17 @@ function initEventListeners() {
     if (addMcpBtn) addMcpBtn.addEventListener('click', openMcpModal);
     if (mcpCancelBtn) mcpCancelBtn.addEventListener('click', closeMcpModal);
     if (mcpSubmitBtn) mcpSubmitBtn.addEventListener('click', handleAddMcp);
+    if (mcpTransport) {
+        mcpTransport.addEventListener('change', (e) => {
+            if (e.target.value === 'sse') {
+                mcpUrlGroup.style.display = 'flex';
+                mcpCommandGroup.style.display = 'none';
+            } else {
+                mcpUrlGroup.style.display = 'none';
+                mcpCommandGroup.style.display = 'flex';
+            }
+        });
+    }
     
     // Close modal on background click
     window.addEventListener('click', (e) => {
@@ -902,6 +917,12 @@ setInterval(pollHistoryChanges, 8000);
 function openMcpModal() {
     mcpName.value = "";
     mcpUrl.value = "";
+    mcpCommand.value = "";
+    if (mcpTransport) {
+        mcpTransport.value = "sse";
+        mcpUrlGroup.style.display = "flex";
+        mcpCommandGroup.style.display = "none";
+    }
     mcpModal.classList.add('show');
 }
 
@@ -935,30 +956,49 @@ function renderMcpList(servers) {
         return;
     }
     
-    sidebarMcpList.innerHTML = servers.map(srv => `
-        <div class="mcp-item">
-            <div class="mcp-item-info">
-                <span class="mcp-status-dot ${srv.status === 'connected' ? 'connected' : 'offline'}" title="Status: ${srv.status}"></span>
-                <span style="font-weight: 500;">${srv.name}</span>
+    sidebarMcpList.innerHTML = servers.map(srv => {
+        const isStdio = srv.transport === 'stdio';
+        const detailInfo = isStdio ? srv.command : srv.url;
+        const typeBadge = isStdio ? '[stdio]' : '[sse]';
+        return `
+            <div class="mcp-item" title="${escapeHtml(detailInfo)}">
+                <div class="mcp-item-info">
+                    <span class="mcp-status-dot ${srv.status === 'connected' ? 'connected' : 'offline'}" title="Status: ${srv.status}"></span>
+                    <span style="font-weight: 500;">${escapeHtml(srv.name)}</span>
+                    <span style="font-size: 0.7rem; color: var(--text-muted); margin-left: 0.25rem;">${typeBadge}</span>
+                </div>
+                <button class="mcp-delete-btn" onclick="handleRemoveMcp('${srv.name}')" title="Disconnect server">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                </button>
             </div>
-            <button class="mcp-delete-btn" onclick="handleRemoveMcp('${srv.name}')" title="Disconnect server">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                </svg>
-            </button>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 // Add new MCP connection
 async function handleAddMcp() {
     const name = mcpName.value.trim();
-    const url = mcpUrl.value.trim();
+    const transport = mcpTransport ? mcpTransport.value : 'sse';
     
-    if (!name || !url) {
-        alert("Please enter both a name and server URL.");
-        return;
+    let payload = { name, transport };
+    
+    if (transport === 'sse') {
+        const url = mcpUrl.value.trim();
+        if (!name || !url) {
+            alert("Please enter both a name and server URL.");
+            return;
+        }
+        payload.url = url;
+    } else {
+        const command = mcpCommand.value.trim();
+        if (!name || !command) {
+            alert("Please enter both a name and command.");
+            return;
+        }
+        payload.command = command;
     }
     
     mcpSubmitBtn.disabled = true;
@@ -968,14 +1008,14 @@ async function handleAddMcp() {
         const response = await fetch('/api/mcp/add', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, url })
+            body: JSON.stringify(payload)
         });
         
         const result = await response.json();
         if (response.ok) {
             closeMcpModal();
             loadMcpConnections();
-            alert(`Successfully connected to '${name}'! Loaded ${result.tools_count} remote tools.`);
+            alert(`Successfully connected to '${name}'! Loaded ${result.tools_count} tools.`);
             fetchBackendStatus();
         } else {
             alert("Connection error: " + (result.error || "Unknown error"));

@@ -195,15 +195,26 @@
     <!-- Add MCP Connection Modal -->
     <div class="modal-backdrop" id="mcpModal">
         <div class="modal-content">
-            <h2>Connect Remote MCP Server</h2>
-            <p class="modal-subtext">Integrate remote tools into your AI using Server-Sent Events (SSE).</p>
+            <h2>Connect MCP Server</h2>
+            <p class="modal-subtext">Integrate remote or local tools into your AI using SSE or Stdio transport.</p>
             <div class="form-group">
                 <label for="mcpName">Server Name</label>
                 <input type="text" id="mcpName" placeholder="e.g. cloud-database" required>
             </div>
             <div class="form-group">
+                <label for="mcpTransport">Transport Type</label>
+                <select id="mcpTransport">
+                    <option value="sse" selected>SSE (Remote URL)</option>
+                    <option value="stdio">Stdio (Local Command)</option>
+                </select>
+            </div>
+            <div class="form-group" id="mcpUrlGroup">
                 <label for="mcpUrl">SSE Endpoint URL</label>
-                <input type="url" id="mcpUrl" placeholder="e.g. http://192.168.1.50:8000/sse" required>
+                <input type="url" id="mcpUrl" placeholder="e.g. http://192.168.1.50:8000/sse">
+            </div>
+            <div class="form-group" id="mcpCommandGroup" style="display: none;">
+                <label for="mcpCommand">Command</label>
+                <input type="text" id="mcpCommand" placeholder="e.g. npx -y @modelcontextprotocol/server-everything">
             </div>
             <div class="modal-actions">
                 <button class="modal-cancel-btn" id="mcpCancelBtn">Cancel</button>
