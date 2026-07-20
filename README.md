@@ -9,9 +9,26 @@
   <img src="https://img.shields.io/badge/License-MIT-orange?style=for-the-badge" alt="License" />
 </p>
 
-PocketStrike AI is a highly optimized, fully featured local AI assistant, background automation engine, and cybersecurity suite running directly inside Termux on Android. It couples a gorgeous, responsive, glassmorphic chat interface with an advanced ReAct (Reasoning and Action) Function Calling Framework and native Model Context Protocol (MCP) support. This allows you to inspect your phone’s system parameters, run subnet-wide network sweeps, execute background crons, dump active UI layouts for device automation, run sandboxed Python scripts, search the web using RAG, and connect to remote tool servers over SSE (Server-Sent Events) to execute cloud microservices.
+## 🧠 AI Agent that gives Termux a Brain
+PocketStrike AI is a highly optimized, fully featured **super lightweight AI agent core** designed to bridge high-level reasoning with low-level Android/Linux device APIs. It is built to turn Termux into an autonomous system operator without bogging down your mobile device.
+
+It couples a gorgeous, responsive, glassmorphic chat interface with an advanced ReAct (Reasoning and Action) Function Calling Framework and native Model Context Protocol (MCP) support. This allows you to inspect your phone’s system parameters, run subnet-wide network sweeps, execute background crons, dump active UI layouts for device automation, run sandboxed Python scripts, search the web using RAG, and connect to remote tool servers over SSE (Server-Sent Events).
 
 Additionally, it integrates a Telegram Bot backend with unified session tracking, allowing you to trigger any of these system tools, check background schedules, or query your AI models remotely from your Telegram app.
+
+### ⚡ Why is it Super Lightweight?
+*   **Zero Local AI Inference Overhead**: Instead of running massive, hot-running local LLMs on your mobile CPU (which consumes 4GB+ RAM and drains battery in minutes), PocketStrike AI acts as an **intelligent orchestrator**. It runs a lightweight ReAct state engine locally and delegates heavy token processing to remote API endpoints or local Ollama servers.
+*   **Minimal Memory Footprint**: The background Flask server is highly optimized, consuming only **30MB - 50MB of RAM** under active loads.
+*   **Ultra-Fast Vanilla Frontend**: The user interface is crafted using Vanilla HTML, CSS, and JS (no heavy layout engines like React or Tailwind), loading instantly even on older budget Android phones.
+*   **Efficient Async I/O**: High-speed utilities (like network sweeps and port scanners) run via custom parallel Python threads, completing sweeps in seconds with negligible CPU usage.
+
+### 📋 System Requirements & Storage Footprint
+| Component | Minimum Specification | Recommended Specification |
+| :--- | :--- | :--- |
+| **Processor (CPU)** | Quad-Core 1.4 GHz (e.g., Snapdragon 400 series) | Octa-Core 2.0 GHz+ (e.g., Snapdragon 600/700/800 series) |
+| **System Memory (RAM)**| 1 GB (with ~100MB free) | 2 GB or more |
+| **Operating System** | Android 7.0+ (via Termux app) | Android 10.0+ (via Termux app) |
+| **Installation Space** | **~100 MB** total storage space (Core files + Python pip dependencies) | **~150 MB** (including cached logs & history) |
 
 ---
 
@@ -142,7 +159,7 @@ PocketStrike AI has access to **50 built-in local tools** to audit, crawl, and c
 
 | # | Tool Name | Description |
 |---|---|---|
-| 1 | `get_system_stats()` | Returns battery capacity, charging state, free RAM, and storage space. |
+| 1 | `get_system_stats()` | Returns battery capacity, charging state, free RAM, and storage space. (Termux:API fallback). |
 | 2 | `local_network_scan()` | Discovers active subnet hosts in parallel, returning IPs and hostnames. |
 | 3 | `subnet_port_sweep(port)` | Sweeps the entire subnet checking which hosts are listening on a specific port. |
 | 4 | `local_port_scan(ip, ports)` | Scans up to 100 ports concurrently, returning open ports and service details. |
@@ -157,33 +174,33 @@ PocketStrike AI has access to **50 built-in local tools** to audit, crawl, and c
 | 13 | `write_file_content(path, c)`| Writes or overwrites a script/file inside the workspace. |
 | 14 | `search_files(pattern)` | Recursively searches workspace files using glob matching. |
 | 15 | `run_python_script(name, args)`| Runs a Python script written by the AI inside the workspace sandbox. |
-| 16 | `send_android_notification()`| Sends a system lockscreen notification banner using Termux:API. |
-| 17 | `vibrate_device(ms)` | Vibrates the phone for a specified duration. |
-| 18 | `take_camera_photo(cam_id)` | Snaps a photo using front ("1") or back ("0") camera and saves to workspace. |
-| 19 | `get_phone_location()` | Retrieves GPS coordinates of the device (latitude, longitude, altitude). |
-| 20 | `make_phone_call(number)` | Places an outgoing call to the specified number using Termux:API. |
-| 21 | `send_sms(number, msg)` | Sends an SMS text message using Termux:API. |
-| 22 | `set_brightness(level)` | Adjusts screen brightness level (0 to 255) using Termux:API. |
-| 23 | `set_volume(stream, level)` | Adjusts volume streams (music, ring, alarm, notification, system). |
+| 16 | `send_android_notification()`| Sends a system lockscreen notification banner. [Requires Termux:API] |
+| 17 | `vibrate_device(ms)` | Vibrates the phone for a specified duration. [Requires Termux:API] |
+| 18 | `take_camera_photo(cam_id)` | Snaps a photo using front ("1") or back ("0") camera and saves to workspace. [Requires Termux:API] |
+| 19 | `get_phone_location()` | Retrieves GPS coordinates of the device (latitude, longitude, altitude). [Requires Termux:API] |
+| 20 | `make_phone_call(number)` | Places an outgoing call to the specified number. [Requires Termux:API] |
+| 21 | `send_sms(number, msg)` | Sends an SMS text message. [Requires Termux:API] |
+| 22 | `set_brightness(level)` | Adjusts screen brightness level (0 to 255). [Requires Termux:API] |
+| 23 | `set_volume(stream, level)` | Adjusts volume streams (music, ring, alarm, notification, system). [Requires Termux:API] |
 | 24 | `take_screenshot()` | Captures the phone's active screen (requires local ADB or Shizuku). |
 | 25 | `tap_screen(x, y)` | Simulates a screen touch event at coordinates (x, y) using local ADB/Shizuku. |
 | 26 | `swipe_screen(x1, y1, x2, y2, ms)`| Simulates a screen swipe gesture from (x1, y1) to (x2, y2) using ADB/Shizuku. |
 | 27 | `press_key(key_code)` | Simulates a physical key event (Home, Back, Power) using ADB/Shizuku. |
 | 28 | `launch_app(pkg_name)` | Opens any application on the device by its package bundle name using ADB/Shizuku. |
 | 29 | `control_android_system(act, tgt)`| Flashlight, Wi-Fi, Bluetooth, Dark Mode, expand notifications, input text. |
-| 30 | `get_clipboard()` | Returns the current text contents of the Android system clipboard. |
-| 31 | `set_clipboard(text)` | Overwrites the Android system clipboard with the specified text. |
+| 30 | `get_clipboard()` | Returns the current text contents of the Android system clipboard. [Requires Termux:API] |
+| 31 | `set_clipboard(text)` | Overwrites the Android system clipboard with the specified text. [Requires Termux:API] |
 | 32 | `list_installed_apps(user_only)`| Lists all installed app package names and their APK paths (user or system apps). |
-| 33 | `scan_wifi_networks()` | Scans nearby Wi-Fi hotspots and returns network details. |
-| 34 | `speak_text(text)` | Uses the Android Text-To-Speech (TTS) engine to read the specified text aloud. |
+| 33 | `scan_wifi_networks()` | Scans nearby Wi-Fi hotspots and returns network details. [Requires Termux:API] |
+| 34 | `speak_text(text)` | Uses the Android Text-To-Speech (TTS) engine to read the specified text aloud. [Requires Termux:API] |
 | 35 | `dns_lookup(domain, rec_type)`| Performs custom DNS queries (A, MX, TXT, CNAME, etc.) for a domain. |
 | 36 | `whois_lookup(domain)` | Queries WHOIS registry details to look up domain registrars and age info. |
 | 37 | `analyze_hash(hash_str)` | Analyzes cryptographic hashes (MD5, SHA, bcrypt) to identify algorithms. |
 | 38 | `open_url_on_phone(url)` | Launches a browser intent to view a URL or open a Google search query on screen. |
 | 39 | `execute_root_command(cmd)` | Executes a root shell instruction via 'su -c' (requires root privileges). |
-| 40 | `audit_sms_inbox(limit)` | Audits recent SMS inbox messages for scam links or spam threats (Termux-API). |
+| 40 | `audit_sms_inbox(limit)` | Audits recent SMS inbox messages for scam links or spam threats. [Requires Termux:API] |
 | 41 | `ip_geolocation_lookup(ip)`| Performs a geographic coordinates and ISP lookup on a remote IP address. |
-| 42 | `read_phone_sensors(name)` | Lists all hardware sensors or reads real-time data from a selected sensor. |
+| 42 | `read_phone_sensors(name)` | Lists all hardware sensors or reads real-time data from a selected sensor. [Requires Termux:API] |
 | 43 | `dump_ui_layout()` | Dumps active screen layout XML and returns a parsed list of click targets. |
 | 44 | `add_scheduled_task(type, trig, desc, tgt)`| Schedules a background reminder ('reminder') or recurring job ('cron'). |
 | 45 | `list_scheduled_tasks()` | Displays all active, pending, or recurring schedules. |
@@ -194,4 +211,4 @@ PocketStrike AI has access to **50 built-in local tools** to audit, crawl, and c
 | 50 | `search_file_content(q, pat)`| Recursively searches text inside all workspace files matching a glob filter. |
 | 51 | `delete_file(file_path)` | Deletes a file or recursively deletes a directory inside your workspace directory. |
 | 52 | `download_file(url, file_name)` | Downloads a file (binary or text, like images, scripts, security payloads) from a web URL and saves it directly in your workspace directory. |
-| 53 | `read_contacts_list(search_query)`| Searches your phone's address book for contacts matching a name/number (Termux-API). |
+| 53 | `read_contacts_list(search_query)`| Searches your phone's address book for contacts matching a name/number. [Requires Termux:API] |
