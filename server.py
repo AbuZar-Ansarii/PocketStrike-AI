@@ -257,7 +257,9 @@ Available Tools:
 51. delete_file(file_path)
     Deletes a file or recursively deletes a directory inside your workspace directory.
 52. download_file(url, file_name)
-    Downloads a file (binary or text, like images, scripts, security payloads) from a web URL and saves it directly in your workspace directory.{mcp_tools_block}
+    Downloads a file (binary or text, like images, scripts, security payloads) from a web URL and saves it directly in your workspace directory.
+53. read_contacts_list(search_query="")
+    Searches the Android device's local address book for contacts matching the search query (name or number). If search_query is omitted, returns all contacts. (runs via local Termux-API).{mcp_tools_block}
 
 Instructions:
 - When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
@@ -1095,6 +1097,41 @@ def send_sms(phone_number, message):
         return f"Error sending SMS: {res.stderr}"
     except Exception as e:
         return f"Error executing SMS tool: {str(e)}"
+
+def read_contacts_list(search_query=None):
+    try:
+        import subprocess
+        import json
+        res = subprocess.run(["termux-contact-list"], capture_output=True, text=True, timeout=8)
+        if res.returncode != 0:
+            return f"Error running termux-contact-list (exit code {res.returncode}): {res.stderr}"
+            
+        contacts = json.loads(res.stdout)
+        
+        if search_query:
+            query = str(search_query).strip().lower()
+            filtered = []
+            for c in contacts:
+                name = str(c.get("name", "")).lower()
+                number = str(c.get("number", "")).lower()
+                if query in name or query in number:
+                    filtered.append(c)
+            contacts = filtered
+            
+        if not contacts:
+            return "No matching contacts found."
+            
+        lines = []
+        for c in contacts:
+            name = c.get("name", "Unknown")
+            number = c.get("number", "N/A")
+            lines.append(f"- {name}: {number}")
+            
+        return "\n".join(lines)
+    except FileNotFoundError:
+        return "Error: termux-contact-list is not available on this device. Ensure Termux:API is installed and configured."
+    except Exception as e:
+        return f"Error reading contacts: {str(e)}"
 
 def set_brightness(level):
     try:
@@ -2605,6 +2642,9 @@ def execute_local_tool(name, args_str):
             if not phone_number or not message:
                 return "Error: Missing required arguments 'phone_number' and/or 'message'."
             return send_sms(phone_number, message)
+        elif name == "read_contacts_list":
+            search_query = kwargs.get("search_query", "")
+            return read_contacts_list(search_query)
         elif name == "set_brightness":
             level = kwargs.get("level")
             if level is None:
