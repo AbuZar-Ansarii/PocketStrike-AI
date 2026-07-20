@@ -2788,7 +2788,7 @@ def execute_local_tool(name, args_str):
                         return "\n".join(text_outputs)
                     return f"Error: Unexpected response format from stdio MCP: {res}"
                 else:
-                    return call_remote_mcp_tool(conn.get("url"), name, kwargs)
+                    return call_remote_mcp_tool(conn.get("url"), name, kwargs, conn.get("headers"))
             else:
                 return f"Error: Tool '{name}' is not recognized."
     except Exception as e:
@@ -3233,32 +3233,7 @@ def save_mcp_connections(conns):
     except Exception as e:
         print(f"Error saving MCP connections: {e}")
 
-def resolve_post_url(base_url, post_path):
-    import urllib.parse
-    if post_path.startswith("http://") or post_path.startswith("https://"):
-        return post_path
-    parsed_base = urllib.parse.urlparse(base_url)
-    base_path = parsed_base.path
-    if not base_path or base_path == "/":
-        return urllib.parse.urljoin(base_url, post_path)
-    clean_post_path = post_path.lstrip("/")
-    if not base_path.endswith("/"):
-        base_path_with_slash = base_path + "/"
-    else:
-        base_path_with_slash = base_path
-    reconstructed_base = urllib.parse.urlunparse((
-        parsed_base.scheme,
-        parsed_base.netloc,
-        base_path_with_slash,
-        parsed_base.params,
-        parsed_base.query,
-        parsed_base.fragment
-    ))
-    normalized_base_path = base_path.strip("/")
-    normalized_post_path = clean_post_path.split("?")[0].split("/")[0]
-    if normalized_base_path and normalized_base_path == normalized_post_path:
-        return urllib.parse.urljoin(base_url, post_path)
-    return urllib.parse.urljoin(reconstructed_base, clean_post_path)
+
 
 class StdioMcpConnection:
     def __init__(self, name, command):
@@ -3436,16 +3411,18 @@ def init_stdio_mcp_connections():
                 else:
                     print(f"❌ Failed to start stdio MCP server '{name}'")
 
-def query_remote_mcp_tools(url):
+def query_remote_mcp_tools(url, headers=None):
     import requests
     import urllib.parse
     import threading
     import json
     import time
     try:
-        headers = {"Accept": "text/event-stream"}
+        req_headers = {"Accept": "text/event-stream"}
+        if headers:
+            req_headers.update(headers)
         # 1. Establish GET stream
-        res = requests.get(url, headers=headers, stream=True, timeout=8)
+        res = requests.get(url, headers=req_headers, stream=True, timeout=8)
         if res.status_code != 200:
             return None, f"SSE endpoint rejected connection (HTTP {res.status_code})"
             
@@ -3462,7 +3439,7 @@ def query_remote_mcp_tools(url):
         if not post_path:
             post_url = urllib.parse.urljoin(url, "/message")
         else:
-            post_url = resolve_post_url(url, post_path)
+            post_url = urllib.parse.urljoin(url, post_path)
             
         # Shared state for thread communication
         shared_state = {
@@ -3500,6 +3477,10 @@ def query_remote_mcp_tools(url):
         # Tiny delay to let reader thread bind
         time.sleep(0.1)
         
+        post_req_headers = {"Content-Type": "application/json"}
+        if headers:
+            post_req_headers.update(headers)
+
         # A. Send initialize request (id=100)
         init_payload = {
             "jsonrpc": "2.0",
@@ -3514,7 +3495,7 @@ def query_remote_mcp_tools(url):
             },
             "id": 100
         }
-        requests.post(post_url, json=init_payload, headers={"Content-Type": "application/json"}, timeout=8)
+        requests.post(post_url, json=init_payload, headers=post_req_headers, timeout=8)
         
         # Wait for initialize response
         for _ in range(50):
@@ -3531,7 +3512,7 @@ def query_remote_mcp_tools(url):
             "jsonrpc": "2.0",
             "method": "notifications/initialized"
         }
-        requests.post(post_url, json=initialized_payload, headers={"Content-Type": "application/json"}, timeout=8)
+        requests.post(post_url, json=initialized_payload, headers=post_req_headers, timeout=8)
         time.sleep(0.1)
         
         # C. Send tools/list request (id=101)
@@ -3541,7 +3522,7 @@ def query_remote_mcp_tools(url):
             "params": {},
             "id": 101
         }
-        requests.post(post_url, json=tools_payload, headers={"Content-Type": "application/json"}, timeout=8)
+        requests.post(post_url, json=tools_payload, headers=post_req_headers, timeout=8)
         
         # Wait for tools/list response
         for _ in range(50):
@@ -3562,16 +3543,18 @@ def query_remote_mcp_tools(url):
     except Exception as e:
         return None, f"Connection failed: {str(e)}"
 
-def call_remote_mcp_tool(base_url, tool_name, arguments):
+def call_remote_mcp_tool(base_url, tool_name, arguments, headers=None):
     import requests
     import urllib.parse
     import threading
     import json
     import time
     try:
-        headers = {"Accept": "text/event-stream"}
+        req_headers = {"Accept": "text/event-stream"}
+        if headers:
+            req_headers.update(headers)
         # 1. Establish GET stream
-        res = requests.get(base_url, headers=headers, stream=True, timeout=8)
+        res = requests.get(base_url, headers=req_headers, stream=True, timeout=8)
         if res.status_code != 200:
             return f"Error: Failed to connect to remote SSE stream (HTTP {res.status_code})"
             
@@ -3587,7 +3570,7 @@ def call_remote_mcp_tool(base_url, tool_name, arguments):
         if not post_path:
             post_url = urllib.parse.urljoin(base_url, "/message")
         else:
-            post_url = resolve_post_url(base_url, post_path)
+            post_url = urllib.parse.urljoin(base_url, post_path)
             
         shared_state = {
             "initialize_response": None,
@@ -3624,6 +3607,10 @@ def call_remote_mcp_tool(base_url, tool_name, arguments):
         
         time.sleep(0.1)
         
+        post_req_headers = {"Content-Type": "application/json"}
+        if headers:
+            post_req_headers.update(headers)
+
         # A. Send initialize request (id=100)
         init_payload = {
             "jsonrpc": "2.0",
@@ -3638,7 +3625,7 @@ def call_remote_mcp_tool(base_url, tool_name, arguments):
             },
             "id": 100
         }
-        requests.post(post_url, json=init_payload, headers={"Content-Type": "application/json"}, timeout=8)
+        requests.post(post_url, json=init_payload, headers=post_req_headers, timeout=8)
         
         # Wait for initialize response
         for _ in range(50):
@@ -3655,7 +3642,7 @@ def call_remote_mcp_tool(base_url, tool_name, arguments):
             "jsonrpc": "2.0",
             "method": "notifications/initialized"
         }
-        requests.post(post_url, json=initialized_payload, headers={"Content-Type": "application/json"}, timeout=8)
+        requests.post(post_url, json=initialized_payload, headers=post_req_headers, timeout=8)
         time.sleep(0.1)
         
         # C. Send tools/call request (id=102)
@@ -3668,7 +3655,7 @@ def call_remote_mcp_tool(base_url, tool_name, arguments):
             },
             "id": 102
         }
-        requests.post(post_url, json=call_payload, headers={"Content-Type": "application/json"}, timeout=20)
+        requests.post(post_url, json=call_payload, headers=post_req_headers, timeout=20)
         
         # Wait for call response
         for _ in range(150):
@@ -3810,10 +3797,13 @@ def send_telegram_photo(token, chat_id, photo_path, caption=None):
         print(f"Error sending photo to Telegram: {e}")
         return False
 
-def check_mcp_status(url):
+def check_mcp_status(url, headers=None):
     import requests
     try:
-        res = requests.get(url, timeout=1.2)
+        req_headers = {}
+        if headers:
+            req_headers.update(headers)
+        res = requests.get(url, headers=req_headers, timeout=1.2)
         # If it returns any HTTP code (even error codes like 405/404), the server port is active and online
         return "connected"
     except Exception:
@@ -3832,7 +3822,7 @@ def list_mcp_servers():
             stdio_conn = active_stdio_connections.get(name)
             new_status = "connected" if (stdio_conn and stdio_conn.is_running) else "offline"
         else:
-            new_status = check_mcp_status(conn.get("url"))
+            new_status = check_mcp_status(conn.get("url"), conn.get("headers"))
             
         if old_status != new_status:
             conn["status"] = new_status
@@ -3894,12 +3884,13 @@ def add_mcp_server():
         return jsonify({"status": "success", "tools_count": len(tools)})
     else:
         url = data.get("url", "").strip()
+        custom_headers = data.get("headers") # Expect dict or None
         if not url:
             return jsonify({"error": "Missing required field 'url' for sse transport."}), 400
             
-        tools, post_url = query_remote_mcp_tools(url)
+        tools, post_url = query_remote_mcp_tools(url, custom_headers)
         if not tools:
-            return jsonify({"error": f"Failed to connect to remote MCP server. Verify URL is correct and server is running."}), 400
+            return jsonify({"error": f"Failed to connect to remote MCP server. Verify URL and headers are correct and server is running."}), 400
             
         new_conn = {
             "name": name,
@@ -3907,7 +3898,8 @@ def add_mcp_server():
             "url": url,
             "post_url": post_url,
             "status": "connected",
-            "tools": tools
+            "tools": tools,
+            "headers": custom_headers
         }
         conns.append(new_conn)
         save_mcp_connections(conns)

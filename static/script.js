@@ -34,6 +34,7 @@ const mcpTransport = document.getElementById('mcpTransport');
 const mcpUrlGroup = document.getElementById('mcpUrlGroup');
 const mcpCommandGroup = document.getElementById('mcpCommandGroup');
 const mcpCommand = document.getElementById('mcpCommand');
+const mcpHeaders = document.getElementById('mcpHeaders');
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
@@ -918,6 +919,7 @@ function openMcpModal() {
     mcpName.value = "";
     mcpUrl.value = "";
     mcpCommand.value = "";
+    if (mcpHeaders) mcpHeaders.value = "";
     if (mcpTransport) {
         mcpTransport.value = "sse";
         mcpUrlGroup.style.display = "flex";
@@ -992,6 +994,16 @@ async function handleAddMcp() {
             return;
         }
         payload.url = url;
+        
+        const headersStr = mcpHeaders ? mcpHeaders.value.trim() : "";
+        if (headersStr) {
+            try {
+                payload.headers = JSON.parse(headersStr);
+            } catch (err) {
+                alert('Invalid headers JSON format. Please use correct JSON formatting. Example: {"Authorization": "Bearer token_here"}');
+                return;
+            }
+        }
     } else {
         const command = mcpCommand.value.trim();
         if (!name || !command) {
