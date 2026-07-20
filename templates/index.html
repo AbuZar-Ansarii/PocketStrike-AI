@@ -205,7 +205,7 @@
                 <label for="mcpTransport">Transport Type</label>
                 <select id="mcpTransport">
                     <option value="sse" selected>SSE (Remote URL)</option>
-                    <option value="stdio">Stdio (Local Command)</option>
+                    <option value="stdio">Stdio (HTTP / Command)</option>
                 </select>
             </div>
             <div class="form-group" id="mcpUrlGroup">
@@ -215,8 +215,8 @@
                 <input type="text" id="mcpHeaders" placeholder='e.g. {"Authorization": "Bearer token_here"}'>
             </div>
             <div class="form-group" id="mcpCommandGroup" style="display: none;">
-                <label for="mcpCommand">Command</label>
-                <input type="text" id="mcpCommand" placeholder="e.g. npx -y @modelcontextprotocol/server-everything">
+                <label for="mcpCommand">Command / Remote URL</label>
+                <input type="text" id="mcpCommand" placeholder="e.g. https://bizarre-gold-antelope.fastmcp.app/mcp or local command">
             </div>
             <div class="modal-actions">
                 <button class="modal-cancel-btn" id="mcpCancelBtn">Cancel</button>

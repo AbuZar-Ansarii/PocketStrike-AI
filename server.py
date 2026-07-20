@@ -3254,10 +3254,17 @@ class StdioMcpConnection:
         import threading
         try:
             use_shell = os.name == 'nt'
-            if use_shell:
-                cmd_args = self.command
+            cmd_str = self.command.strip()
+            if cmd_str.startswith("http://") or cmd_str.startswith("https://"):
+                if use_shell:
+                    cmd_args = f"uvx fastmcp-remote {cmd_str}"
+                else:
+                    cmd_args = ["uvx", "fastmcp-remote", cmd_str]
             else:
-                cmd_args = shlex.split(self.command)
+                if use_shell:
+                    cmd_args = cmd_str
+                else:
+                    cmd_args = shlex.split(cmd_str)
                 
             self.proc = subprocess.Popen(
                 cmd_args,
