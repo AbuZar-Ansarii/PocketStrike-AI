@@ -323,7 +323,7 @@ def get_system_prompt():
     # Load remote MCP tools
     mcp_conns = load_mcp_connections()
     mcp_tool_lines = []
-    tool_counter = 58
+    tool_counter = 59
     for conn in mcp_conns:
         server_name = conn.get("name")
         for t in conn.get("tools", []):
@@ -484,7 +484,9 @@ Available Tools:
 56. detect_faces_in_photo(photo_path)
     Performs face detection on the specified photo using OpenCV and Haar Cascade. Binds green boxes around detected faces and saves the output as 'annotated_<filename>'. (runs via local Python processor).
 57. check_system_health(auto_install=False)
-    Diagnoses local Termux dependencies (e.g. nmap, git, termux-api, adb) and python modules, and optionally installs missing requirements if auto_install=True. (runs via local shell).{mcp_tools_block}
+    Diagnoses local Termux dependencies (e.g. nmap, git, termux-api, adb) and python modules, and optionally installs missing requirements if auto_install=True. (runs via local shell).
+58. scan_nearby_signals()
+    Scans physical radio frequency signals for nearby Wi-Fi access points and Bluetooth beacons in range. Saves an audit report to the workspace as 'signal_scan_log.md'. Do not confuse this with local_network_scan() which scans active IP addresses on the connected subnet. (runs via local Termux-API or Shizuku).{mcp_tools_block}
 
 Instructions:
 - When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
@@ -1768,6 +1770,130 @@ def active_threat_sentinel_daemon():
             print(f"⚠️ [Sentinel Daemon Error]: {str(e)}")
             
         time.sleep(120)
+
+def scan_nearby_signals():
+    """
+    Scans physical radio waves for nearby Wi-Fi access points (SSID, BSSID, RSSI, channel) 
+    and Bluetooth/BLE beacons (name, address, RSSI) in range. 
+    Saves a signal audit report to the workspace as 'signal_scan_log.md'.
+    """
+    import subprocess
+    import json
+    import time
+    import os
+    import shutil
+    
+    wifi_results = []
+    bt_results = []
+    
+    # 1. Scan Wi-Fi
+    wifi_ok = False
+    # Try termux-wifi-scaninfo first
+    if shutil.which("termux-wifi-scaninfo"):
+        try:
+            res = subprocess.run(["termux-wifi-scaninfo"], capture_output=True, text=True, timeout=12)
+            if res.returncode == 0:
+                raw_data = json.loads(res.stdout)
+                for item in raw_data:
+                    wifi_results.append({
+                        "ssid": item.get("ssid", "Hidden"),
+                        "bssid": item.get("bssid", "N/A"),
+                        "rssi": f"{item.get('rssi', 0)} dBm",
+                        "channel": item.get("frequency", 0),
+                        "security": item.get("capabilities", "N/A")
+                    })
+                wifi_ok = True
+        except Exception:
+            pass
+            
+    # Try ADB fallback if termux-api failed or is missing
+    if not wifi_ok and shutil.which("rish"):
+        try:
+            env = os.environ.copy()
+            env["RISH_APPLICATION_ID"] = get_termux_package_id()
+            env.pop("LD_LIBRARY_PATH", None)
+            env.pop("LD_PRELOAD", None)
+            
+            # Start scan
+            subprocess.run(["rish", "-c", "cmd wifi start-scan"], capture_output=True, timeout=5, env=env)
+            time.sleep(2) # Give scan a moment to gather results
+            res = subprocess.run(["rish", "-c", "cmd wifi list-scan-results"], capture_output=True, text=True, timeout=8, env=env)
+            if res.returncode == 0:
+                lines = res.stdout.splitlines()
+                # Parse standard cmd wifi scan table format
+                # e.g., BSSID              Frequency  RSSI  Age      SSID...
+                for line in lines[1:]:
+                    parts = line.split()
+                    if len(parts) >= 4:
+                        wifi_results.append({
+                            "ssid": " ".join(parts[4:]) if len(parts) > 4 else "Hidden",
+                            "bssid": parts[0],
+                            "rssi": f"{parts[2]} dBm",
+                            "channel": parts[1],
+                            "security": "N/A"
+                        })
+                wifi_ok = True
+        except Exception:
+            pass
+            
+    # 2. Scan Bluetooth (Requires Termux:API)
+    if shutil.which("termux-bluetooth-scan"):
+        try:
+            # Start BT scan (usually runs as a daemon/service)
+            subprocess.run(["termux-bluetooth-scan", "on"], capture_output=True, timeout=5)
+            time.sleep(3.5) # Wait for devices to cache
+            res = subprocess.run(["termux-bluetooth-scan", "c"], capture_output=True, text=True, timeout=8)
+            if res.returncode == 0:
+                raw_bt = json.loads(res.stdout)
+                for item in raw_bt:
+                    bt_results.append({
+                        "name": item.get("name", "Unknown"),
+                        "mac": item.get("address", "N/A"),
+                        "rssi": f"{item.get('rssi', 0)} dBm"
+                    })
+            # Turn scan off
+            subprocess.run(["termux-bluetooth-scan", "off"], capture_output=True, timeout=3)
+        except Exception:
+            pass
+
+    # Build Markdown Output
+    md = []
+    md.append("# 📶 PocketStrike Wireless Signal Audit")
+    md.append(f"Audit timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+    
+    # Wi-Fi Section
+    md.append("## 🌐 Nearby Wi-Fi Access Points")
+    if wifi_results:
+        md.append("| SSID | BSSID | RSSI | Frequency/Channel | Security/Capabilities |")
+        md.append("|---|---|---|---|---|")
+        for ap in wifi_results:
+            md.append(f"| {ap['ssid']} | `{ap['bssid']}` | **{ap['rssi']}** | {ap['channel']} MHz | {ap['security']} |")
+    else:
+        md.append("_No Wi-Fi access points discovered (Ensure Wi-Fi is enabled and Location services are turned on)._")
+        
+    md.append("\n")
+    
+    # Bluetooth Section
+    md.append("## 🔵 Nearby Bluetooth / BLE Beacons")
+    if bt_results:
+        md.append("| Device Name | MAC Address | RSSI |")
+        md.append("|---|---|---|")
+        for dev in bt_results:
+            md.append(f"| {dev['name']} | `{dev['mac']}` | **{dev['rssi']}** |")
+    else:
+        md.append("_No Bluetooth devices discovered (Ensure Bluetooth is turned on and scannable)._")
+
+    md_content = "\n".join(md)
+    
+    # Save log in workspace
+    log_path = os.path.join(WORKSPACE_DIR, "signal_scan_log.md")
+    try:
+        with open(log_path, "w", encoding="utf-8") as f:
+            f.write(md_content)
+    except Exception:
+        pass
+        
+    return f"Success: Scan completed. Discovered {len(wifi_results)} Wi-Fi APs and {len(bt_results)} Bluetooth devices. Saved detailed scan report to workspace as 'signal_scan_log.md'.\n\n" + md_content
 
 def set_brightness(level):
     try:
@@ -3297,6 +3423,8 @@ def execute_local_tool(name, args_str):
             if isinstance(auto_install, str):
                 auto_install = auto_install.lower() == "true"
             return check_system_health(auto_install)
+        elif name == "scan_nearby_signals":
+            return scan_nearby_signals()
         elif name == "set_brightness":
             level = kwargs.get("level")
             if level is None:

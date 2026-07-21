@@ -159,7 +159,7 @@ PocketStrike AI is built with privacy-first principles. **Zero conversation data
 
 ## 🔧 ReAct Function Calling Tools
 
-PocketStrike AI has access to **57 built-in local tools** to audit, crawl, and control systems:
+PocketStrike AI has access to **58 built-in local tools** to audit, crawl, and control systems:
 
 > [!IMPORTANT]
 > Tools marked with **`[Requires Termux:API]`** require the **Termux:API** Android application (available on F-Droid) to be installed on your device, along with the CLI package (`pkg install termux-api`) configured inside Termux.
@@ -223,3 +223,4 @@ PocketStrike AI has access to **57 built-in local tools** to audit, crawl, and c
 | 55 | `movement_intrusion_alarm(duration_sec)`| Monitors hardware accelerometer sensors to detect movement. [Requires Termux:API] |
 | 56 | `detect_faces_in_photo(photo_path)`| Performs face detection on a photo and draws green bounding boxes. |
 | 57 | `check_system_health(auto_install)`| Diagnoses local Termux dependencies and python modules; installs missing packages if auto_install=True. |
+| 58 | `scan_nearby_signals()` | Scans local physical Wi-Fi access points and Bluetooth beacons in range. [Requires Termux:API] |
