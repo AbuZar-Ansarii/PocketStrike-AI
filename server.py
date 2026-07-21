@@ -3804,48 +3804,29 @@ def get_ai_response_stream(messages):
         })
         
     loop_count = 0
-    max_loops = 5
+    max_loops = 10
     
     while loop_count < max_loops:
         stream = call_ai_api_stream(messages)
         
-        buffer = ""
-        is_tool_call = None
         accumulated_response = ""
-        
         for chunk in stream:
             accumulated_response += chunk
-            buffer += chunk
+            yield chunk
             
-            if is_tool_call is None:
-                if len(buffer) >= 11:
-                    if buffer.startswith("[TOOL_CALL:"):
-                        is_tool_call = True
-                    else:
-                        is_tool_call = False
-                        yield buffer
-                        buffer = ""
-            else:
-                if not is_tool_call:
-                    yield chunk
-                    
-        if is_tool_call is False or is_tool_call is None:
-            messages.append({"role": "assistant", "content": accumulated_response})
-            yield f"\n[HISTORY_SYNC]:{json.dumps(messages)}"
-            return
-            
+        # Check if the accumulated response contains a tool call
         match = re.search(r'\[TOOL_CALL:\s*(\w+)\((.*)\)\s*\]', accumulated_response)
         if not match:
             messages.append({"role": "assistant", "content": accumulated_response})
-            yield accumulated_response
             yield f"\n[HISTORY_SYNC]:{json.dumps(messages)}"
             return
             
         tool_name = match.group(1)
         tool_args_str = match.group(2)
         
-        yield accumulated_response
+        print(f"🔧 AI requested tool: {tool_name}({tool_args_str})")
         
+        # Execute tool
         tool_result = execute_local_tool(tool_name, tool_args_str)
         
         tool_result_msg = f"\n[TOOL_RESULT: {tool_name} output]\n{tool_result}"
