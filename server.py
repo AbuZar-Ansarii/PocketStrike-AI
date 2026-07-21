@@ -1270,52 +1270,164 @@ def movement_intrusion_alarm(duration_sec=10):
 
 def detect_faces_in_photo(photo_path):
     import os
+    import base64
     real_path = os.path.abspath(os.path.expanduser(photo_path))
     if not os.path.exists(real_path):
         real_path = os.path.join(WORKSPACE_DIR, photo_path)
         if not os.path.exists(real_path):
             return f"Error: Photo file '{photo_path}' not found."
             
+    # Try importing OpenCV first for drawing local bounding boxes
     try:
         import cv2
+        has_opencv = True
     except ImportError:
-        return "Error: OpenCV is not installed on this Termux environment. To enable local face detection, install it by running:\npkg install opencv\nor\npip install opencv-python"
+        has_opencv = False
         
+    if has_opencv:
+        try:
+            image = cv2.imread(real_path)
+            if image is not None:
+                gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+                cascade_path = os.path.join(cv2.data.haarcascades, 'haarcascade_frontalface_default.xml')
+                if not os.path.exists(cascade_path):
+                    import urllib.request
+                    url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
+                    os.makedirs(os.path.dirname(cascade_path), exist_ok=True)
+                    urllib.request.urlretrieve(url, cascade_path)
+                    
+                face_cascade = cv2.CascadeClassifier(cascade_path)
+                faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+                
+                num_faces = len(faces)
+                if num_faces > 0:
+                    for (x, y, w, h) in faces:
+                        cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                    annotated_name = "annotated_" + os.path.basename(real_path)
+                    annotated_path = os.path.join(os.path.dirname(real_path), annotated_name)
+                    cv2.imwrite(annotated_path, image)
+                    return f"FACE DETECTED (via local OpenCV): Found {num_faces} human face(s) in the photo. Annotated image saved as '{annotated_name}'."
+                else:
+                    return "No faces detected in the photo (via local OpenCV)."
+        except Exception:
+            pass
+
+    # --- FALLBACK: USE DYNAMIC LLM VISION API (ZERO EXTRA LOCAL DEPENDENCIES!) ---
     try:
-        image = cv2.imread(real_path)
-        if image is None:
-            return f"Error: Failed to read image file at '{real_path}'."
+        with open(real_path, "rb") as image_file:
+            encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
             
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        cascade_path = os.path.join(cv2.data.haarcascades, 'haarcascade_frontalface_default.xml')
+        provider = config.get("provider")
+        model = config.get("model")
+        api_key = config.get("api_key", "")
+        base_url = config.get("base_url", "")
         
-        if not os.path.exists(cascade_path):
-            import urllib.request
-            url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
-            os.makedirs(os.path.dirname(cascade_path), exist_ok=True)
-            urllib.request.urlretrieve(url, cascade_path)
+        if not provider or not api_key:
+            return "Error: Local OpenCV is not installed, and AI provider key is not configured for fallback face detection."
             
-        face_cascade = cv2.CascadeClassifier(cascade_path)
-        faces = face_cascade.detectMultiScale(
-            gray,
-            scaleFactor=1.1,
-            minNeighbors=5,
-            minSize=(30, 30)
-        )
+        prompt = "Look at this photo. Is there any human face in it? Answer with: 'YES, [Count] face(s) detected. Description: [gender, expression, details]' or 'NO, no faces detected.'"
         
-        num_faces = len(faces)
-        if num_faces > 0:
-            for (x, y, w, h) in faces:
-                cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 2)
-            annotated_name = "annotated_" + os.path.basename(real_path)
-            annotated_path = os.path.join(os.path.dirname(real_path), annotated_name)
-            cv2.imwrite(annotated_path, image)
-            
-            return f"FACE DETECTED: Found {num_faces} human face(s) in the photo. Annotated image saved to workspace as '{annotated_name}'."
+        # 1. Google Gemini API
+        if provider == "gemini":
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+            payload = {
+                "contents": [{
+                    "parts": [
+                        {"text": prompt},
+                        {
+                            "inlineData": {
+                                "mimeType": "image/jpeg",
+                                "data": encoded_string
+                            }
+                        }
+                    ]
+                }]
+            }
+            res = requests.post(url, json=payload, timeout=25)
+            if res.status_code == 200:
+                data = res.json()
+                try:
+                    result = data["candidates"][0]["content"]["parts"][0]["text"]
+                    return f"FACE ANALYSIS (via LLM API Cloud Fallback):\n{result.strip()}"
+                except Exception:
+                    return "Error parsing response from Gemini API."
+            else:
+                return f"Error connecting to Gemini Vision API (status code {res.status_code}): {res.text}"
+                
+        # 2. OpenAI API
+        elif provider == "openai":
+            api_endpoint = f"{base_url}/chat/completions" if base_url else "https://api.openai.com/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{encoded_string}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "max_tokens": 100
+            }
+            res = requests.post(api_endpoint, headers=headers, json=payload, timeout=25)
+            if res.status_code == 200:
+                data = res.json()
+                result = data["choices"][0]["message"]["content"]
+                return f"FACE ANALYSIS (via OpenAI API Cloud Fallback):\n{result.strip()}"
+            else:
+                return f"Error connecting to OpenAI Vision API (status code {res.status_code}): {res.text}"
+                
+        # 3. Anthropic API
+        elif provider == "anthropic":
+            api_endpoint = f"{base_url}/messages" if base_url else "https://api.anthropic.com/v1/messages"
+            headers = {
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json"
+            }
+            payload = {
+                "model": model,
+                "max_tokens": 100,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": encoded_string
+                                }
+                            },
+                            {"type": "text", "text": prompt}
+                        ]
+                    }
+                ]
+            }
+            res = requests.post(api_endpoint, headers=headers, json=payload, timeout=25)
+            if res.status_code == 200:
+                data = res.json()
+                result = data["content"][0]["text"]
+                return f"FACE ANALYSIS (via Anthropic API Cloud Fallback):\n{result.strip()}"
+            else:
+                return f"Error connecting to Anthropic Vision API (status code {res.status_code}): {res.text}"
+                
         else:
-            return "No faces detected in the photo."
+            return "Error: Local OpenCV is not installed and fallback image recognition is not supported for your active provider."
+            
     except Exception as e:
-        return f"Error performing face detection: {str(e)}"
+        return f"Error performing face detection fallback: {str(e)}"
 
 def set_brightness(level):
     try:
