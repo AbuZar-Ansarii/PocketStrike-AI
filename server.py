@@ -78,10 +78,24 @@ def get_android_workspace():
     return fallback
 
 def initialize_memory_files():
-    user_path = os.path.join(WORKSPACE_DIR, "user.md")
-    memory_path = os.path.join(WORKSPACE_DIR, "memory.md")
-    agent_path = os.path.join(WORKSPACE_DIR, "agent.md")
+    # Create the agent directory inside WORKSPACE_DIR
+    agent_dir = os.path.join(WORKSPACE_DIR, "agent")
+    os.makedirs(agent_dir, exist_ok=True)
     
+    user_path = os.path.join(agent_dir, "user.md")
+    memory_path = os.path.join(agent_dir, "memory.md")
+    agent_path = os.path.join(agent_dir, "agent.md")
+    
+    # 0. Migrate existing user.md, memory.md, agent.md if in the root WORKSPACE_DIR
+    import shutil
+    for fname in ["user.md", "memory.md", "agent.md"]:
+        root_file = os.path.join(WORKSPACE_DIR, fname)
+        target_file = os.path.join(agent_dir, fname)
+        if os.path.exists(root_file) and not os.path.exists(target_file):
+            try:
+                shutil.move(root_file, target_file)
+            except Exception: pass
+            
     # 1. Migrate legacy memory.json if present
     legacy_memory_path = os.path.join(WORKSPACE_DIR, "memory.json")
     legacy_memory_content = ""
@@ -151,9 +165,9 @@ def auto_evolve_memory_background(messages):
         if not recent_history:
             return
 
-        user_path = os.path.join(WORKSPACE_DIR, "user.md")
-        memory_path = os.path.join(WORKSPACE_DIR, "memory.md")
-        agent_path = os.path.join(WORKSPACE_DIR, "agent.md")
+        user_path = os.path.join(WORKSPACE_DIR, "agent", "user.md")
+        memory_path = os.path.join(WORKSPACE_DIR, "agent", "memory.md")
+        agent_path = os.path.join(WORKSPACE_DIR, "agent", "agent.md")
 
         user_content = "No profile stored yet."
         if os.path.exists(user_path):
@@ -278,9 +292,9 @@ Respond with ONLY the JSON block. Do not include markdown code block formatting 
 
 def get_system_prompt():
     # Read user.md, memory.md, and agent.md for Hermes-style memory
-    user_path = os.path.join(WORKSPACE_DIR, "user.md")
-    memory_path = os.path.join(WORKSPACE_DIR, "memory.md")
-    agent_path = os.path.join(WORKSPACE_DIR, "agent.md")
+    user_path = os.path.join(WORKSPACE_DIR, "agent", "user.md")
+    memory_path = os.path.join(WORKSPACE_DIR, "agent", "memory.md")
+    agent_path = os.path.join(WORKSPACE_DIR, "agent", "agent.md")
 
     user_content = "No user profile stored yet."
     if os.path.exists(user_path):
