@@ -62,7 +62,10 @@ cd ~/PocketStrike-AI && bash launch.sh
 
 *   **Unified Chat History Engine**: The agent maintains a single unified mind across platforms. Messages sent via Telegram are instantly visible in the Web interface, and vice-versa, synchronizing context in real-time.
 *   **60-Message sliding window**: Supports deep conversation tracking by passing up to the last 60 message states to the LLM API, while preserving complete logs on local storage.
-*   **Self-Evolving Long-Term Memory**: The AI dynamically updates `memory.json` (user facts, parameters) and `instructions.txt` (core behaviors). These files are re-injected on every turn alongside a dynamic system clock header to calculate scheduled time offsets.
+*   **Self-Evolving Long-Term Memory**: The AI dynamically updates `agent/user.md`, `agent/memory.md`, and `agent/agent.md` files via background conversation reflections. These files are re-injecting on every turn to adapt to your preferences.
+*   **Active Threat Intrusion Sentinel**: Runs a background daemon thread that checks `/proc/net/arp` and network metrics for active ARP Spoofing/MITM threats, automatically sending system lockscreen banners (via `termux-api` notification), text-to-speech warnings, and Telegram bot alerts.
+*   **Rich Media Chat Previews**: The Web UI automatically renders dynamic, cached-busted images (`<img>`) and video players (`<video>`) inside chat bubbles whenever workspace screenshots, photos, or recordings are generated or mentioned.
+*   **Self-Dependency Doctor & Auto-Installer**: Runs a full environment diagnostic (`check_system_health`) checking for required CLI utilities and Python modules, and can automatically execute non-interactive `pkg install` and `pip install` repairs if requested.
 *   **Persistent Background Scheduler**: A daemon thread checks for scheduled reminders or recurring cron intervals (e.g. *"remind me to blink my eyes every 1 minute"*) and alerts you locally or via Telegram.
 *   **Audio Beep & System Fallback**: If the device lacks Termux:API, the scheduler utilizes the ASCII Bell code (`\a`) to beep/vibrate Termux natively, and dynamically redirects screen alerts to Telegram.
 *   **Robust ADB/Shizuku execution**: Features parameter-safe parsing and automatic standard ADB fallbacks if the Shizuku emulator binder (`rish`) becomes unauthorized or goes offline.
@@ -156,7 +159,7 @@ PocketStrike AI is built with privacy-first principles. **Zero conversation data
 
 ## 🔧 ReAct Function Calling Tools
 
-PocketStrike AI has access to **56 built-in local tools** to audit, crawl, and control systems:
+PocketStrike AI has access to **57 built-in local tools** to audit, crawl, and control systems:
 
 > [!IMPORTANT]
 > Tools marked with **`[Requires Termux:API]`** require the **Termux:API** Android application (available on F-Droid) to be installed on your device, along with the CLI package (`pkg install termux-api`) configured inside Termux.
@@ -219,3 +222,4 @@ PocketStrike AI has access to **56 built-in local tools** to audit, crawl, and c
 | 54 | `record_screen_video(duration_sec)`| Records a video clip of the phone's screen for a specified duration (ADB/Shizuku). |
 | 55 | `movement_intrusion_alarm(duration_sec)`| Monitors hardware accelerometer sensors to detect movement. [Requires Termux:API] |
 | 56 | `detect_faces_in_photo(photo_path)`| Performs face detection on a photo and draws green bounding boxes. |
+| 57 | `check_system_health(auto_install)`| Diagnoses local Termux dependencies and python modules; installs missing packages if auto_install=True. |

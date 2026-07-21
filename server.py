@@ -323,7 +323,7 @@ def get_system_prompt():
     # Load remote MCP tools
     mcp_conns = load_mcp_connections()
     mcp_tool_lines = []
-    tool_counter = 57
+    tool_counter = 58
     for conn in mcp_conns:
         server_name = conn.get("name")
         for t in conn.get("tools", []):
@@ -482,7 +482,9 @@ Available Tools:
 55. movement_intrusion_alarm(duration_sec=10)
     Monitors phone movement using hardware accelerometer sensors. If moved, vibrates and triggers an intrusion alert notification. (runs via local Termux-API).
 56. detect_faces_in_photo(photo_path)
-    Performs face detection on the specified photo using OpenCV and Haar Cascade. Binds green boxes around detected faces and saves the output as 'annotated_<filename>'. (runs via local Python processor).{mcp_tools_block}
+    Performs face detection on the specified photo using OpenCV and Haar Cascade. Binds green boxes around detected faces and saves the output as 'annotated_<filename>'. (runs via local Python processor).
+57. check_system_health(auto_install=False)
+    Diagnoses local Termux dependencies (e.g. nmap, git, termux-api, adb) and python modules, and optionally installs missing requirements if auto_install=True. (runs via local shell).{mcp_tools_block}
 
 Instructions:
 - When a user asks you a question that requires a tool, output ONLY the tool call trigger. Do not include any prefix, suffix, or explanation in that turn.
@@ -1645,6 +1647,127 @@ def detect_faces_in_photo(photo_path):
             
     except Exception as e:
         return f"Error performing face detection fallback: {str(e)}"
+
+def check_system_health(auto_install=False):
+    import shutil
+    import subprocess
+    import sys
+    
+    report = []
+    missing_packages = []
+    
+    # 1. Check CLI Binaries
+    cli_tools = {
+        "termux-api": "termux-api",
+        "nmap": "nmap",
+        "git": "git",
+        "dig": "dnsutils",
+        "netstat": "net-tools",
+        "ip": "iproute2",
+        "traceroute": "traceroute",
+        "adb": "adb"
+    }
+    
+    report.append("=== CLI Dependencies Audit ===")
+    for tool, pkg in cli_tools.items():
+        path = shutil.which(tool)
+        status = "✅ Installed" if path else "❌ Missing"
+        report.append(f"- {tool}: {status} (pkg: {pkg})")
+        if not path:
+            missing_packages.append(pkg)
+            
+    # 2. Check Python Packages
+    py_packages = {
+        "flask": "Flask",
+        "requests": "requests",
+        "urllib3": "urllib3",
+        "cv2": "opencv-python"
+    }
+    
+    report.append("\n=== Python Libraries Audit ===")
+    missing_pip = []
+    for mod, pip_name in py_packages.items():
+        try:
+            __import__(mod)
+            status = "✅ Installed"
+        except ImportError:
+            status = "❌ Missing"
+            missing_pip.append(pip_name)
+        report.append(f"- {mod}: {status}")
+
+    # 3. Handle Auto-Installation
+    if missing_packages or missing_pip:
+        if auto_install:
+            report.append("\n🛠️ [Auto-Installer] Starting installation of missing dependencies...")
+            
+            # Install CLI dependencies
+            for pkg in missing_packages:
+                report.append(f"- Running: pkg install -y {pkg}")
+                res = subprocess.run(["pkg", "install", "-y", pkg], capture_output=True, text=True, timeout=90)
+                if res.returncode == 0:
+                    report.append(f"  └─ Success: Installed {pkg}")
+                else:
+                    report.append(f"  └─ Failed: {res.stderr.strip()}")
+            
+            # Install Python dependencies
+            for pip_name in missing_pip:
+                report.append(f"- Running: pip install {pip_name}")
+                if pip_name == "opencv-python":
+                    res = subprocess.run(["pkg", "install", "-y", "opencv"], capture_output=True, text=True, timeout=120)
+                else:
+                    res = subprocess.run([sys.executable, "-m", "pip", "install", pip_name], capture_output=True, text=True, timeout=90)
+                if res.returncode == 0:
+                    report.append(f"  └─ Success: Installed {pip_name}")
+                else:
+                    report.append(f"  └─ Failed: {res.stderr.strip()}")
+            
+            report.append("\n✅ Auto-Installer process finished.")
+        else:
+            report.append(f"\n⚠️ Missing dependencies detected. Run check_system_health(auto_install=True) to install them automatically.")
+    else:
+        report.append("\n🎉 All dependencies are fully satisfied! Your system is healthy.")
+        
+    return "\n".join(report)
+
+def active_threat_sentinel_daemon():
+    """
+    Background daemon thread that runs continuously to scan for system/network threats.
+    If an ARP spoofing attack is detected, it triggers vibrations, lockscreen
+    notifications using termux-api, text-to-speech, and notifies active telegram chats.
+    """
+    import time
+    import json
+    
+    print("🛡️ [Sentinel Daemon] Background Active Threat Sentinel started.")
+    
+    last_arp_alert_time = 0
+    
+    while True:
+        try:
+            now_time = time.time()
+            # Only alert every 5 minutes if it continues
+            if now_time - last_arp_alert_time > 300:
+                arp_res_str = detect_arp_spoofing()
+                if "WARNING:" in arp_res_str or '"status": "warning"' in arp_res_str:
+                    msg = "🚨 PocketStrike Alert: Potential Wi-Fi MITM / ARP Spoofing attack detected! Multiple IPs mapped to one MAC address."
+                    
+                    # Vibration and System Notification using termux-api
+                    vibrate_device(1000)
+                    send_android_notification("🚨 Wi-Fi Intrusion Detected!", "Potential MITM / ARP Spoofing attack active on network.")
+                    speak_text("Warning: Potential Wi-Fi Intrusion Detected on current network!")
+                    
+                    # Telegram Alerts
+                    token = config.get("api_key_telegram") or config.get("telegram_bot_token")
+                    if token:
+                        chats = get_registered_telegram_chats()
+                        for cid in chats:
+                            send_telegram_msg(token, cid, msg)
+                            
+                    last_arp_alert_time = now_time
+        except Exception as e:
+            print(f"⚠️ [Sentinel Daemon Error]: {str(e)}")
+            
+        time.sleep(120)
 
 def set_brightness(level):
     try:
@@ -3169,6 +3292,11 @@ def execute_local_tool(name, args_str):
             if not photo_path:
                 return "Error: Missing required argument 'photo_path'."
             return detect_faces_in_photo(photo_path)
+        elif name == "check_system_health":
+            auto_install = kwargs.get("auto_install", False)
+            if isinstance(auto_install, str):
+                auto_install = auto_install.lower() == "true"
+            return check_system_health(auto_install)
         elif name == "set_brightness":
             level = kwargs.get("level")
             if level is None:
@@ -4750,6 +4878,15 @@ def get_status():
 def send_static(path):
     return send_from_directory('static', path)
 
+# Serve workspace files statically (for image/video chat previews)
+@app.route('/workspace/<path:filename>')
+def serve_workspace_file(filename):
+    # Normalize path and check directory bounds for safety
+    safe_path = os.path.abspath(os.path.join(WORKSPACE_DIR, filename))
+    if not safe_path.startswith(os.path.abspath(WORKSPACE_DIR)):
+        return jsonify({"error": "Access denied"}), 403
+    return send_from_directory(WORKSPACE_DIR, filename)
+
 if __name__ == '__main__':
     import logging
     import flask.cli
@@ -4771,6 +4908,14 @@ if __name__ == '__main__':
     # Start Scheduler Thread
     scheduler_thread = threading.Thread(target=scheduler_worker_loop, daemon=True)
     scheduler_thread.start()
+
+    # Start Active Threat Sentinel Thread
+    try:
+        sentinel_thread = threading.Thread(target=active_threat_sentinel_daemon, daemon=True)
+        sentinel_thread.start()
+    except Exception as e:
+        print(f"Error starting sentinel daemon: {e}")
+
     # 2. Launch Telegram Bot if enabled
     telegram_status = "Disabled"
     if config.get("telegram_enabled") and config.get("telegram_token"):

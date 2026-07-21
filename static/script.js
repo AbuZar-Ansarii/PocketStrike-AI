@@ -915,6 +915,37 @@ function parseMarkdown(text) {
         html = html.replace(`__TOOL_RESULT_PLACEHOLDER_${i}__`, toolBlocks[i]);
     }
 
+    // 9. Append media previews if files are mentioned in response
+    let mediaAppend = "";
+    if (html.toLowerCase().includes("captured_screenshot.png")) {
+        mediaAppend += `
+            <div class="chat-media-card">
+                <div class="chat-media-title">📱 Screenshot Preview</div>
+                <img src="/workspace/captured_screenshot.png?t=${Date.now()}" class="chat-media-img" onclick="window.open(this.src, '_blank')" />
+            </div>
+        `;
+    }
+    if (html.toLowerCase().includes("captured_photo.jpg")) {
+        mediaAppend += `
+            <div class="chat-media-card">
+                <div class="chat-media-title">📸 Camera Capture</div>
+                <img src="/workspace/captured_photo.jpg?t=${Date.now()}" class="chat-media-img" onclick="window.open(this.src, '_blank')" />
+            </div>
+        `;
+    }
+    if (html.toLowerCase().includes("captured_screen_record.mp4")) {
+        mediaAppend += `
+            <div class="chat-media-card">
+                <div class="chat-media-title">🎥 Screen Recording</div>
+                <video src="/workspace/captured_screen_record.mp4?t=${Date.now()}" class="chat-media-video" controls></video>
+            </div>
+        `;
+    }
+    
+    if (mediaAppend) {
+        html += `<div class="chat-media-grid">${mediaAppend}</div>`;
+    }
+
     return html;
 }
 
