@@ -16,6 +16,8 @@ const messagesContainer = document.getElementById('messagesContainer');
 const welcomeScreen = document.getElementById('welcomeScreen');
 const chatInput = document.getElementById('chatInput');
 const sendBtn = document.getElementById('sendBtn');
+const attachBtn = document.getElementById('attachBtn');
+const fileInput = document.getElementById('fileInput');
 const headerModelBadge = document.getElementById('headerModelBadge');
 const statusProvider = document.getElementById('statusProvider');
 const statusModel = document.getElementById('statusModel');
@@ -84,6 +86,59 @@ function initEventListeners() {
 
     // Send Button Click
     sendBtn.addEventListener('click', handleSend);
+
+    // File Upload Handler
+    if (attachBtn && fileInput) {
+        attachBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        fileInput.addEventListener('change', async () => {
+            const file = fileInput.files[0];
+            if (!file) return;
+            
+            if (file.size > 10 * 1024 * 1024) {
+                alert("File size exceeds 10MB limit.");
+                fileInput.value = "";
+                return;
+            }
+            
+            const originalPlaceholder = chatInput.placeholder;
+            chatInput.placeholder = `Uploading ${file.name}...`;
+            chatInput.disabled = true;
+            attachBtn.disabled = true;
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                const res = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    const uploadNotice = `[Uploaded File: ${data.filename} (${data.size_kb} KB)]\nCan you explain this file?`;
+                    chatInput.value = (chatInput.value ? chatInput.value + "\n" : "") + uploadNotice;
+                    chatInput.focus();
+                    chatInput.style.height = 'auto';
+                    chatInput.style.height = chatInput.scrollHeight + 'px';
+                } else {
+                    const err = await res.json();
+                    alert(`Upload failed: ${err.error || 'Unknown error'}`);
+                }
+            } catch (e) {
+                console.error("Upload error:", e);
+                alert(`Network error uploading file: ${e.message}`);
+            } finally {
+                chatInput.placeholder = originalPlaceholder;
+                chatInput.disabled = false;
+                attachBtn.disabled = false;
+                fileInput.value = "";
+            }
+        });
+    }
 
     // MCP Modal Toggles
     if (addMcpBtn) addMcpBtn.addEventListener('click', openMcpModal);

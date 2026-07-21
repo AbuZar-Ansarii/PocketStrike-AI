@@ -4945,6 +4945,43 @@ def sync_history():
             
     return jsonify({"status": "success"})
 
+@app.route('/api/upload', methods=['POST'])
+def upload_file():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part in the request"}), 400
+        
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No file selected for uploading"}), 400
+        
+    # Check content length (limit to 10MB)
+    content_length = request.content_length
+    if content_length and content_length > 10 * 1024 * 1024:
+        return jsonify({"error": "File size exceeds limit of 10MB."}), 400
+        
+    try:
+        from werkzeug.utils import secure_filename
+        filename = secure_filename(file.filename)
+        save_path = os.path.join(WORKSPACE_DIR, filename)
+        
+        # Save file
+        file.save(save_path)
+        
+        # Verify saved file size is actually under 10MB
+        if os.path.getsize(save_path) > 10 * 1024 * 1024:
+            os.remove(save_path)
+            return jsonify({"error": "File size exceeds limit of 10MB."}), 400
+            
+        size_kb = round(os.path.getsize(save_path) / 1024, 1)
+        return jsonify({
+            "status": "success",
+            "filename": filename,
+            "size_kb": size_kb,
+            "path": save_path
+        })
+    except Exception as e:
+        return jsonify({"error": f"Failed to save file: {str(e)}"}), 500
+
 @app.route('/')
 def home():
     return render_template('index.html')
