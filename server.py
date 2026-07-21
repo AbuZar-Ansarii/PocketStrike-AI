@@ -107,7 +107,7 @@ def get_system_prompt():
     # 4. Load remote MCP tools
     mcp_conns = load_mcp_connections()
     mcp_tool_lines = []
-    tool_counter = 51
+    tool_counter = 57
     for conn in mcp_conns:
         server_name = conn.get("name")
         for t in conn.get("tools", []):
