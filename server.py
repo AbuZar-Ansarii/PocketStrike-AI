@@ -73,12 +73,66 @@ def get_android_workspace():
             return os.path.abspath(p)
         except Exception:
             continue
-    # Fallback to local subdirectory if shared storage is not accessible (e.g. running on PC/dev host)
     fallback = os.path.abspath(os.path.join(os.path.dirname(__file__), "workspace"))
     os.makedirs(fallback, exist_ok=True)
     return fallback
 
+def initialize_memory_files():
+    user_path = os.path.join(WORKSPACE_DIR, "user.md")
+    memory_path = os.path.join(WORKSPACE_DIR, "memory.md")
+    agent_path = os.path.join(WORKSPACE_DIR, "agent.md")
+    
+    # 1. Migrate legacy memory.json if present
+    legacy_memory_path = os.path.join(WORKSPACE_DIR, "memory.json")
+    legacy_memory_content = ""
+    if os.path.exists(legacy_memory_path):
+        try:
+            with open(legacy_memory_path, "r", encoding="utf-8") as f:
+                legacy_memory_content = f.read().strip()
+            os.remove(legacy_memory_path)
+        except Exception: pass
+
+    # 2. Migrate legacy instructions.txt if present
+    legacy_inst_path = os.path.join(WORKSPACE_DIR, "instructions.txt")
+    legacy_inst_content = ""
+    if os.path.exists(legacy_inst_path):
+        try:
+            with open(legacy_inst_path, "r", encoding="utf-8") as f:
+                legacy_inst_content = f.read().strip()
+            os.remove(legacy_inst_path)
+        except Exception: pass
+
+    # 3. Initialize user.md
+    if not os.path.exists(user_path):
+        try:
+            with open(user_path, "w", encoding="utf-8") as f:
+                f.write("# User Profile\n- Name: (To be detected/filled by AI)\n- Preferences: (To be detected/filled by AI)\n- Skill Level: (To be detected/filled by AI)\n")
+        except Exception: pass
+        
+    # 4. Initialize memory.md (merge with legacy memory if migrated)
+    if not os.path.exists(memory_path):
+        try:
+            content = "# Long-Term Memory\n"
+            if legacy_memory_content and legacy_memory_content != "No facts stored yet.":
+                content += f"\n### Migrated Memories:\n{legacy_memory_content}\n"
+            else:
+                content += "- (No memories stored yet. Conversations and project facts will be auto-saved here.)\n"
+            with open(memory_path, "w", encoding="utf-8") as f:
+                f.write(content)
+        except Exception: pass
+        
+    # 5. Initialize agent.md (merge with legacy instructions if migrated)
+    if not os.path.exists(agent_path):
+        try:
+            content = "# Agent Directives\n- Role: You are PocketStrike AI, a powerful security and system assistant running in Termux on Android.\n- Personality: Technical, professional, and efficient.\n"
+            if legacy_inst_content and legacy_inst_content != "No custom instructions saved yet.":
+                content += f"\n### Migrated Instructions:\n{legacy_inst_content}\n"
+            with open(agent_path, "w", encoding="utf-8") as f:
+                f.write(content)
+        except Exception: pass
+
 WORKSPACE_DIR = get_android_workspace()
+initialize_memory_files()
 
 def auto_evolve_memory_background(messages):
     """
