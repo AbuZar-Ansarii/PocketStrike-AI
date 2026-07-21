@@ -136,15 +136,16 @@ PocketStrike AI natively supports the **Model Context Protocol (MCP)** using the
 
 ---
 
-## 🛡️ Local Privacy & Unified Memory Core
+## 🛡️ Local Privacy & Self-Evolving Memory Core
 
 PocketStrike AI is built with privacy-first principles. **Zero conversation data is leaked to external cloud history trackers.**
 
 *   **Unified Conversation Log (`unified_history.json`):** Your conversations are saved locally in a single private JSON database in your internal workspace, syncing Web chats and Telegram streams.
-*   **Self-Evolution Memory Loop:** 
-    *   **`memory.json`**: The AI maintains a local log of user preferences, habits, working styles, and goals. It updates this file dynamically using its tools when it learns new facts about you.
-    *   **`instructions.txt`**: Saves custom behavior directives, formatting preferences, and script execution rules.
-    *   *These memory blocks are automatically re-injected into the system prompt on every turn, allowing the agent to dynamically grow and adapt specifically to you over time.*
+*   **Hermes-Style Persistent Memory Loop:**
+    *   **`user.md`**: Stores your profile, including your name, interests, skill levels, and specific user preferences.
+    *   **`memory.md`**: Acts as your agent's long-term memory. It logs system configurations, project conventions, tool tips, and lesson learnings.
+    *   **`agent.md`**: Defines the agent's soul, operational principles, tone of voice, and custom behavior directives.
+    *   *These files are automatically loaded and re-injected into the system prompt on every turn. At the end of every user/assistant interaction turn (in both Web UI and Telegram), a background reflection thread evaluates the conversation changes and automatically appends/updates these files in real-time, making the agent truly self-evolving.*
 
 ## 🔒 Security Sandbox Guardrails
 *   **Path Enforcement**: The AI is strictly sandboxed. All write/read operations normalize path traversals (`..`) and resolve absolute real paths. If the AI tries to write or modify anything outside of `~/storage/shared/PocketStrike-AI`, the sandbox blocks it with an access denied error.

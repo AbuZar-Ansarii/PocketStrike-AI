@@ -80,31 +80,179 @@ def get_android_workspace():
 
 WORKSPACE_DIR = get_android_workspace()
 
+def auto_evolve_memory_background(messages):
+    """
+    Runs in a background thread after each chat turn to review the interaction
+    and automatically update user.md, memory.md, or agent.md if new facts,
+    preferences, or operational learnings were acquired.
+    """
+    try:
+        import requests
+        import json
+        import os
+        import re
+
+        # Only reflect on the last 4 messages to keep context window tiny and cheap!
+        recent_history = messages[-4:]
+        if not recent_history:
+            return
+
+        user_path = os.path.join(WORKSPACE_DIR, "user.md")
+        memory_path = os.path.join(WORKSPACE_DIR, "memory.md")
+        agent_path = os.path.join(WORKSPACE_DIR, "agent.md")
+
+        user_content = "No profile stored yet."
+        if os.path.exists(user_path):
+            with open(user_path, "r", encoding="utf-8") as f:
+                user_content = f.read().strip()
+
+        memory_content = "No long-term memories stored yet."
+        if os.path.exists(memory_path):
+            with open(memory_path, "r", encoding="utf-8") as f:
+                memory_content = f.read().strip()
+
+        agent_content = "You are PocketStrike AI, a powerful local security and system assistant running in Termux on the user's Android phone."
+        if os.path.exists(agent_path):
+            with open(agent_path, "r", encoding="utf-8") as f:
+                agent_content = f.read().strip()
+
+        # Build a reflection prompt
+        reflection_prompt = f"""You are the memory reflection unit for PocketStrike AI.
+Your job is to analyze the recent conversation and update the agent's long-term memory files.
+
+Current files content:
+--- user.md (User profile, preferences, name, skill level) ---
+{user_content}
+
+--- memory.md (Facts, project conventions, tool tips, lessons learned) ---
+{memory_content}
+
+--- agent.md (Agent soul, identity, rules, behavior) ---
+{agent_content}
+
+Recent Conversation:
+{json.dumps(recent_history, indent=2)}
+
+Task:
+Based on the recent conversation, did you learn any new details about the user (name, preferences, interests), project context, or new behavior rules?
+If so, update the content of user.md, memory.md, or agent.md accordingly. Keep it concise, structured in clean Markdown, and merge with existing content. Do not overwrite existing facts unless they have changed.
+
+You must respond with raw JSON in this format:
+{{
+  "user_updated": true/false,
+  "user_content": "complete updated user.md text",
+  "memory_updated": true/false,
+  "memory_content": "complete updated memory.md text",
+  "agent_updated": true/false,
+  "agent_content": "complete updated agent.md text"
+}}
+
+Respond with ONLY the JSON block. Do not include markdown code block formatting (no ```json).
+"""
+
+        provider = config.get("provider")
+        model = config.get("model")
+        api_key = config.get("api_key", "")
+        base_url = config.get("base_url", "")
+        
+        if not provider or not api_key:
+            return
+
+        response_text = ""
+        
+        # Call the model
+        if provider == "gemini":
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+            payload = {
+                "contents": [{"parts": [{"text": reflection_prompt}]}]
+            }
+            res = requests.post(url, json=payload, timeout=20)
+            if res.status_code == 200:
+                data = res.json()
+                response_text = data["candidates"][0]["content"]["parts"][0]["text"]
+        elif provider == "openai":
+            url = f"{base_url}/chat/completions" if base_url else "https://api.openai.com/v1/chat/completions"
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            payload = {
+                "model": model,
+                "messages": [{"role": "user", "content": reflection_prompt}],
+                "max_tokens": 1000
+            }
+            res = requests.post(url, headers=headers, json=payload, timeout=20)
+            if res.status_code == 200:
+                response_text = res.json()["choices"][0]["message"]["content"]
+        elif provider == "anthropic":
+            url = f"{base_url}/messages" if base_url else "https://api.anthropic.com/v1/messages"
+            headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
+            payload = {
+                "model": model,
+                "max_tokens": 1000,
+                "messages": [{"role": "user", "content": [{"type": "text", "text": reflection_prompt}]}]
+            }
+            res = requests.post(url, headers=headers, json=payload, timeout=20)
+            if res.status_code == 200:
+                response_text = res.json()["content"][0]["text"]
+                
+        # Parse the JSON response
+        if response_text:
+            response_text = response_text.strip()
+            if response_text.startswith("```"):
+                response_text = re.sub(r'^```(?:json)?\n', '', response_text)
+                response_text = re.sub(r'\n```$', '', response_text)
+            response_text = response_text.strip()
+            
+            updates = json.loads(response_text)
+            
+            # Save updates
+            if updates.get("user_updated") and updates.get("user_content"):
+                with open(user_path, "w", encoding="utf-8") as f:
+                    f.write(updates["user_content"].strip())
+                print("🧠 [Self-Evolution] user.md auto-updated.")
+                
+            if updates.get("memory_updated") and updates.get("memory_content"):
+                with open(memory_path, "w", encoding="utf-8") as f:
+                    f.write(updates["memory_content"].strip())
+                print("🧠 [Self-Evolution] memory.md auto-updated.")
+                
+            if updates.get("agent_updated") and updates.get("agent_content"):
+                with open(agent_path, "w", encoding="utf-8") as f:
+                    f.write(updates["agent_content"].strip())
+                print("🧠 [Self-Evolution] agent.md auto-updated.")
+                
+    except Exception as e:
+        print(f"⚠️ [Self-Evolution Error] failed to auto-evolve memory: {str(e)}")
+
 def get_system_prompt():
-    # Read persistent memory
-    memory_content = "No facts stored yet."
-    memory_path = os.path.join(WORKSPACE_DIR, "memory.json")
+    # Read user.md, memory.md, and agent.md for Hermes-style memory
+    user_path = os.path.join(WORKSPACE_DIR, "user.md")
+    memory_path = os.path.join(WORKSPACE_DIR, "memory.md")
+    agent_path = os.path.join(WORKSPACE_DIR, "agent.md")
+
+    user_content = "No user profile stored yet."
+    if os.path.exists(user_path):
+        try:
+            with open(user_path, "r", encoding="utf-8") as f:
+                user_content = f.read().strip()
+        except Exception: pass
+
+    memory_content = "No long-term memories stored yet."
     if os.path.exists(memory_path):
         try:
             with open(memory_path, "r", encoding="utf-8") as f:
                 memory_content = f.read().strip()
-        except Exception:
-            pass
-            
-    # Read learned instructions
-    instructions_content = "No custom instructions saved yet."
-    instructions_path = os.path.join(WORKSPACE_DIR, "instructions.txt")
-    if os.path.exists(instructions_path):
+        except Exception: pass
+
+    agent_content = "You are PocketStrike AI, a powerful local security and system assistant running in Termux on the user's Android phone."
+    if os.path.exists(agent_path):
         try:
-            with open(instructions_path, "r", encoding="utf-8") as f:
-                instructions_content = f.read().strip()
-        except Exception:
-            pass
+            with open(agent_path, "r", encoding="utf-8") as f:
+                agent_content = f.read().strip()
+        except Exception: pass
 
     import datetime
     current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S (Day: %A)")
 
-    # 4. Load remote MCP tools
+    # Load remote MCP tools
     mcp_conns = load_mcp_connections()
     mcp_tool_lines = []
     tool_counter = 57
@@ -130,24 +278,25 @@ def get_system_prompt():
     if mcp_tool_lines:
         mcp_tools_block = "\n" + "\n".join(mcp_tool_lines)
 
-    return f"""You are PocketStrike AI, a powerful local security and system assistant running in Termux on the user's Android phone.
+    return f"""{agent_content}
 Current local time and date: {current_time}
-You are a self-evolving AI agent: you can grow, learn, and expand your capabilities over time by writing scripts, learning new rules, and persisting your memory.
+You are a self-evolving AI agent that grows more capable over time by reflecting on your experiences and automatically updating your persistent memory files (user.md, memory.md, and agent.md).
 
 Your workspace directory is: {WORKSPACE_DIR} (located in the phone's internal storage). Always save files requested by the user inside this folder.
 Your project root directory is: {os.path.abspath(os.path.dirname(__file__))} (where your codebase lives). You are allowed to read code files here to explain them, but write access is strictly denied to keep this folder safe from modification.
 Critical: You are strictly sandboxed. All write operations (write_file_content) are only allowed inside your workspace directory ({WORKSPACE_DIR}). You are forbidden from writing files in your project root or modifying your own running server code.
 
-AI PERSISTENT MEMORY (Stored locally and privately on user's device):
-You are a privacy-focused, self-evolving AI. You must actively maintain a deep understanding of the user.
-Whenever the user shares their name, preferences, goals, habits, working style, or local system parameters, you MUST immediately call write_file_content to save these facts in 'memory.json'. This forms your long-term memory and is re-injected on every single turn.
-Current Memory:
+---
+### 👤 USER PROFILE (Stored in 'user.md')
+{user_content}
+
+---
+### 💾 LONG-TERM MEMORY & CONVENTIONS (Stored in 'memory.md')
 {memory_content}
 
-AI SELF-EVOLUTION INSTRUCTIONS (Stored locally and privately on user's device):
-Use write_file_content to update 'instructions.txt' to add new behavioral rules, customized script styles, or operational guidelines for yourself as you grow with the user.
-Current Instructions:
-{instructions_content}
+---
+### 🤖 AGENT SOUL & BEHAVIOR DIRECTIVES (Stored in 'agent.md')
+{agent_content}
 
 If you need to use a tool to answer the user's request, you must respond with EXACTLY this trigger format and nothing else in that turn:
 [TOOL_CALL: tool_name(arg1="value", arg2="value")]
@@ -4255,6 +4404,10 @@ def telegram_bot_loop(token):
                 ai_response, updated_history = get_ai_response_with_tools(messages)
                 save_unified_history(updated_history)
                 
+                # Trigger background memory evolution thread
+                import threading
+                threading.Thread(target=auto_evolve_memory_background, args=(updated_history.copy(),), daemon=True).start()
+                
                 # Check if camera photo was successfully captured in the chat session
                 photo_path = os.path.join(WORKSPACE_DIR, "captured_photo.jpg")
                 screenshot_path = os.path.join(WORKSPACE_DIR, "captured_screenshot.png")
@@ -4508,6 +4661,9 @@ def chat():
         if streamed_text:
             messages.append({"role": "assistant", "content": streamed_text})
             save_unified_history(messages)
+            # Trigger background memory evolution thread
+            import threading
+            threading.Thread(target=auto_evolve_memory_background, args=(messages.copy(),), daemon=True).start()
 
     return Response(generate(), mimetype='text/event-stream')
 
