@@ -86,9 +86,9 @@ def initialize_memory_files():
     memory_path = os.path.join(agent_dir, "memory.md")
     agent_path = os.path.join(agent_dir, "agent.md")
     
-    # 0. Migrate existing user.md, memory.md, agent.md if in the root WORKSPACE_DIR
+    # 0. Migrate existing user.md, memory.md, agent.md, and state JSONs if in the root WORKSPACE_DIR
     import shutil
-    for fname in ["user.md", "memory.md", "agent.md"]:
+    for fname in ["user.md", "memory.md", "agent.md", "unified_history.json", "conversations.json", "mcp_connections.json", "telegram_active_chats.json"]:
         root_file = os.path.join(WORKSPACE_DIR, fname)
         target_file = os.path.join(agent_dir, fname)
         if os.path.exists(root_file) and not os.path.exists(target_file):
@@ -3712,7 +3712,7 @@ def call_ai_api(messages):
         return f"Request Error: {str(e)}"
 
 def load_unified_history():
-    history_file = os.path.join(WORKSPACE_DIR, "unified_history.json")
+    history_file = os.path.join(WORKSPACE_DIR, "agent", "unified_history.json")
     if os.path.exists(history_file):
         try:
             with open(history_file, "r", encoding="utf-8") as f:
@@ -3724,7 +3724,7 @@ def load_unified_history():
     ]
 
 def save_unified_history(history):
-    history_file = os.path.join(WORKSPACE_DIR, "unified_history.json")
+    history_file = os.path.join(WORKSPACE_DIR, "agent", "unified_history.json")
     try:
         os.makedirs(os.path.dirname(history_file), exist_ok=True)
         with open(history_file, "w", encoding="utf-8") as f:
@@ -3733,7 +3733,7 @@ def save_unified_history(history):
         print(f"Error saving unified history: {e}")
 
 def load_conversations():
-    conv_file = os.path.join(WORKSPACE_DIR, "conversations.json")
+    conv_file = os.path.join(WORKSPACE_DIR, "agent", "conversations.json")
     if os.path.exists(conv_file):
         try:
             with open(conv_file, "r", encoding="utf-8") as f:
@@ -3743,7 +3743,7 @@ def load_conversations():
     return []
 
 def save_conversations(conversations):
-    conv_file = os.path.join(WORKSPACE_DIR, "conversations.json")
+    conv_file = os.path.join(WORKSPACE_DIR, "agent", "conversations.json")
     try:
         os.makedirs(os.path.dirname(conv_file), exist_ok=True)
         with open(conv_file, "w", encoding="utf-8") as f:
@@ -3752,7 +3752,7 @@ def save_conversations(conversations):
         print(f"Error saving conversations.json: {e}")
 
 def register_telegram_chat(chat_id):
-    chats_file = os.path.join(WORKSPACE_DIR, "telegram_active_chats.json")
+    chats_file = os.path.join(WORKSPACE_DIR, "agent", "telegram_active_chats.json")
     chats = []
     if os.path.exists(chats_file):
         try:
@@ -3769,7 +3769,7 @@ def register_telegram_chat(chat_id):
             pass
 
 def get_registered_telegram_chats():
-    chats_file = os.path.join(WORKSPACE_DIR, "telegram_active_chats.json")
+    chats_file = os.path.join(WORKSPACE_DIR, "agent", "telegram_active_chats.json")
     if os.path.exists(chats_file):
         try:
             with open(chats_file, "r") as f:
@@ -3779,7 +3779,7 @@ def get_registered_telegram_chats():
     return []
 
 def load_mcp_connections():
-    mcp_file = os.path.join(WORKSPACE_DIR, "mcp_connections.json")
+    mcp_file = os.path.join(WORKSPACE_DIR, "agent", "mcp_connections.json")
     if os.path.exists(mcp_file):
         try:
             with open(mcp_file, "r", encoding="utf-8") as f:
@@ -3789,7 +3789,7 @@ def load_mcp_connections():
     return []
 
 def save_mcp_connections(conns):
-    mcp_file = os.path.join(WORKSPACE_DIR, "mcp_connections.json")
+    mcp_file = os.path.join(WORKSPACE_DIR, "agent", "mcp_connections.json")
     try:
         os.makedirs(os.path.dirname(mcp_file), exist_ok=True)
         with open(mcp_file, "w", encoding="utf-8") as f:
