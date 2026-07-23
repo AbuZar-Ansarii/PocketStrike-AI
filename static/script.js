@@ -879,15 +879,15 @@ function parseMarkdown(text) {
         return placeholder;
     });
 
-    // 1. Parse Code Blocks ```code```
-    // Store blocks to prevent parsing inside them later
+    // 1. Parse Code Blocks ```code``` (supports closed and unclosed/streaming code blocks)
     const codeBlocks = [];
-    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
+    html = html.replace(/```(\w*)\n([\s\S]*?)(?:```|$)/g, (match, lang, code) => {
         const placeholder = `__CODE_BLOCK_PLACEHOLDER_${codeBlocks.length}__`;
-        const escapedCode = escapeHtml(code.trim());
+        const escapedCode = escapeHtml(code.trimEnd());
+        const langDisplay = (lang || 'CODE').toUpperCase();
         const header = `
             <div class="code-header">
-                <span>${lang.toUpperCase() || 'CODE'}</span>
+                <span>${langDisplay}</span>
                 <button class="copy-code-btn" onclick="copyCodeBlock(this)">Copy</button>
             </div>
         `;
